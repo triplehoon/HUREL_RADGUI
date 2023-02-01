@@ -17,8 +17,8 @@ HUREL::CRUXELL::CruxellIO::CruxellIO() : h1(NULL)
     if (mIsConnect)
     {
         spdlog::info("Start reset connection with fpga");
-       	usb_setting(2);
-        usb_setting(3);	
+        usb_setting(2);
+        usb_setting(3);
         spdlog::info("Done reset connection with fpga");
     }
 }
@@ -181,7 +181,7 @@ void HUREL::CRUXELL::CruxellIO::SetTestSettingValues()
     tb_0x19_1 = 4000;
     tb_0x19_2 = 4000;
     tb_0x19_3 = 4000;
-    tb_0x19_4 = 1;
+    tb_0x19_4 = 4;
     tb_0x19_5 = 4000;
     tb_0x19_6 = 4000;
     tb_0x19_7 = 4000;
@@ -204,6 +204,62 @@ void HUREL::CRUXELL::CruxellIO::SetTestSettingValues()
         tb_0x0a = 0;
         tb_0x0b = 0;
     }
+}
+
+void HUREL::CRUXELL::CruxellIO::SetByteDataAddingFunction(void (*const func)(const unsigned short *))
+{
+    mFuncAdder = func;
+}
+
+bool HUREL::CRUXELL::CruxellIO::Run()
+{
+    if (mIsRunning)
+    {
+        spdlog::warn("Already the FPGA is running.");
+        return true;
+    }
+
+    if (!mIsConnect)
+    {
+        spdlog::warn("FPGA is not connected");
+        return false;
+    }
+
+    usb_setting(1);
+
+    if (pthread_create(&tidParsingThread, NULL, parserLoop, this) < 0)
+    {
+        spdlog::error("CRUXELLIO parserLoop thread creation fail!!!");
+        usb_setting(3);
+        return false;
+    }
+    mIsRunning = true;
+    return true;
+}
+
+bool HUREL::CRUXELL::CruxellIO::Stop()
+{
+    if (!mIsRunning)
+    {
+        spdlog::info("FPGA is not running. Stop procedure is finished");
+        return true;
+    }
+    mIsRunning = false;
+
+    usb_setting(2);
+    usb_setting(3);
+    pthread_join(tidParsingThread, nullptr);
+
+    cyusb_close();
+
+    spdlog::info("FPGA stop procedure is finished");
+
+    return true;
+}
+
+bool HUREL::CRUXELL::CruxellIO::IsRunning()
+{
+    return mIsRunning;
 }
 
 void HUREL::CRUXELL::CruxellIO::usb_setting(int flag)
@@ -323,4 +379,143 @@ void HUREL::CRUXELL::CruxellIO::usb_setting(int flag)
             spdlog::warn("usb setting 3 ecount: {0}", ecount);
         }
     }
+}
+
+static int packetCount = 0;
+
+void HUREL::CRUXELL::CruxellIO::tranferCallback(libusb_transfer *transfer)
+{
+    CruxellIO &io = CruxellIO::instance();
+
+    switch (transfer->status)
+    {
+    case LIBUSB_TRANSFER_COMPLETED:
+        spdlog::info("Call back sucess");
+        for (int i = 0; i < transfer->actual_length; ++i)
+        {
+            if (transfer->buffer[i] == 0xfe)
+            {
+                // spdlog::info("fefe in");
+                ++packetCount;
+                if (packetCount > 0 && packetCount % 100 == 0)
+                {
+                    spdlog::info("{0} 0xfe packet count", packetCount);
+                }
+            }
+        }
+        break;
+
+    default:
+        spdlog::info("Call back fail");
+        break;
+    }
+}
+
+void *HUREL::CRUXELL::CruxellIO::parserLoop(void *arg1)
+{
+    CruxellIO &io = CruxellIO::instance();
+
+    int transferResult;
+    constexpr size_t buffsize = 0x4000;
+    unsigned char buf[buffsize];
+    
+    int transferred;
+    memset(buf, 0xff, buffsize);
+    size_t packetCount = 0;
+
+    unsigned char dataBuffer[296];
+    memset(dataBuffer, 0, 296);
+
+    unsigned short testBuff[144];
+
+    int flag = 0; // nothing 1 is find FE, 2 find seond FE
+    int countFlag = 0;
+
+    while (io.mIsRunning)
+    {
+
+        transferResult = cyusb_bulk_transfer(io.h1, io.mInEnpointAddress, buf, buffsize, &transferred, 1000);
+
+        if (transferResult == 0)
+        {
+
+            for (int i = 0; i < transferred; ++i)
+            {
+
+                if (flag == 2)
+                {
+                    dataBuffer[countFlag] = buf[i];
+                    ++countFlag;
+                    if (countFlag == 296 && dataBuffer[294] == 0xFE && dataBuffer[295] == 0xFE)
+                    {
+                        ++packetCount;
+
+                        // if (packetCount > 0 && packetCount % 1000000 == 0)
+                        // {
+                        //     printf("%d: ", packetCount);
+                        //     for (int shortCount = 9 * 4; shortCount < 9 * 5; ++shortCount)
+                        //     {
+                        //         unsigned short *shortPose = (unsigned short *)dataBuffer;
+                        //         printf("%000u ", shortPose[shortCount]);
+                        //     }
+                        //     printf("\n");
+                        // }
+
+                        io.mFuncAdder((unsigned short*)dataBuffer);
+                        countFlag = 0;
+                    }
+                    else if (countFlag == 296)
+                    {
+                        spdlog::warn("reset flag as 0");
+                        countFlag = 0;
+                        flag = 0;
+                    }
+                }
+                else
+                {
+                    if (buf[i] == 0xFE && flag == 0)
+                    {
+                        spdlog::info("fpga flag is 1");
+                        flag = 1;
+                    }
+                    else if (buf[i] == 0xFE && flag == 1)
+                    {
+                        spdlog::info("fpga flag is 2");
+                        flag = 2;
+                    }
+                    else
+                    {
+                        //spdlog::info("fpga flag is 0");
+                        flag = 0;
+                    }
+                }
+            }
+        }
+        else
+        {
+
+            if (transferResult == LIBUSB_ERROR_TIMEOUT)
+            {
+                // spdlog::warn("There are no data to process (time out)");
+            }
+            else if (transferResult == LIBUSB_ERROR_NO_DEVICE)
+            {
+                spdlog::error("Device is deiconnected break the reader loop (no device");
+                break;
+            }
+            else
+            {
+                spdlog::error("ohter libusb erro: {0}", transferResult);
+                break;
+            }
+        }
+    }
+
+    // empty io buffer    
+    while (transferResult == 0)
+    {
+        transferResult = cyusb_bulk_transfer(io.h1, io.mInEnpointAddress, buf, buffsize, &transferred, 1000);
+    }
+
+    return nullptr;
 }

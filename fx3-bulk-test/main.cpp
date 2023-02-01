@@ -172,32 +172,38 @@ void callbackUSBTransferComplete(struct libusb_transfer *xfr)
 	}
 }
 
+static size_t packetTest = 0;
+
+void testFunc(const unsigned short* buff)
+{
+	++packetTest;
+	if (packetTest > 0 && packetTest % 10000 == 0)
+	{
+		for (int i = 0; i < 148; ++i)
+		{
+			printf("%d ", buff[i]);
+		}
+		printf("\n");
+	}
+}
+
 int main(int argc, char **argv)
 {
-	// putenv( "LIBUSB_DEBUG=4" );
+
 	HUREL::CRUXELL::CruxellIO &cruxellIO = HUREL::CRUXELL::CruxellIO::instance();
 	if (!cruxellIO.IsConnect())
 	{
 		spdlog::error("fx3 not connected!! exit program");
 		return -1;
 	}
-	cruxellIO.SetSettingValues();
-	h1 = cruxellIO.h1;
+	cruxellIO.SetByteDataAddingFunction(testFunc);
+	cruxellIO.SetTestSettingValues();
 
-	// cruxellIO.usb_setting(2);
-	// cruxellIO.usb_setting(3);
-
-	cruxellIO.usb_setting(1);
-	readerBool = true;
-	pthread_t tid1, tid2;
-	pthread_create(&tid1, NULL, reader, NULL);
-
-	char c;
-
+	cruxellIO.Run();
 	spdlog::info("press enter to terminate program");
 	while (1)
 	{
-		c = getchar();
+		int c = getchar();
 		if (c == 10)
 		{
 			break;
@@ -206,9 +212,6 @@ int main(int argc, char **argv)
 	spdlog::info("usb connection off");
 	readerBool = false;
 
-	cruxellIO.usb_setting(2);
-	cruxellIO.usb_setting(3);
-	cyusb_close();
-
+	cruxellIO.Stop();
 	return 0;
 }
