@@ -1,8 +1,16 @@
+#pragma once
+
 #include <vector>
 
 //#include "RealsenseControl.h"
 
-//#include "RtabmapSlamControl.h"
+#include "RtabmapSlamControl.h"
+
+#include "spdlog/spdlog.h"
+
+#include "Module.h"
+#include "ListModeData.h"
+#include "ReconPointCloud.h"
 
 #include <iostream>
 #include <vector>
@@ -13,12 +21,6 @@
 #include <thread>
 #include <future>
 #include <array>
-
-#include "Module.h"
-//#include "ListModeData.h"
-//#include "ReconPointCloud.h"
-
-
 
 #define ACTIVE_AREA_LENGTH 0.
 
@@ -120,3 +122,4 @@ namespace HUREL {
 		};
 	}
 }
+

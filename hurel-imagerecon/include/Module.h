@@ -11,9 +11,10 @@
 #include <cassert>
 #include <sstream>
 #include <limits>
-#include <eigen3/Eigen/Core>
+#include <Eigen/Core>
 #include <mkl/mkl.h>
 
+#include "spdlog/spdlog.h"
 #include "EnergySpectrum.h"
 
 namespace HUREL {
@@ -101,3 +102,4 @@ namespace HUREL {
 		};
 	}
 }
+

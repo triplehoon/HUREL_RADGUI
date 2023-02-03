@@ -11,7 +11,7 @@ include_directories(${CMAKE_SOURCE_DIR}/fx3-bulk-test/include
 
 add_executable(fx3-bulk-test main.cpp)
 
-TARGET_LINK_LIBRARIES(fx3-bulk-test cyusb cruxell)
+TARGET_LINK_LIBRARIES(fx3-bulk-test cruxell)
 
 
 

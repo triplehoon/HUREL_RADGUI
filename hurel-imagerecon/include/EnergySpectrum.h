@@ -9,7 +9,10 @@
 #include <iostream>
 #include <sstream>
 
+#include "spdlog/spdlog.h"
+
 #include "EnergySpectrumData.h"
+
 
 namespace HUREL {
 	namespace Compton {
@@ -33,3 +36,5 @@ namespace HUREL {
 		};
 	}
 }
+
+

@@ -5,9 +5,9 @@
 #include <open3d/utility/Helper.h>
 #include <unordered_map>
 
-
 #include "ListModeData.h"
 #include "RadiationImage.h"
+#include "spdlog/spdlog.h"
 
 namespace HUREL
 {

@@ -1,21 +1,18 @@
 project(hurel-imagerecon)
 
 
-if(NOT TARGET spdlog)
-    # Stand-alone build
-    find_package(spdlog REQUIRED)
-endif()
+include_directories(include {OpenCV_INCLUDE_DIRS})
 
-
-
-include_directories(include)
 
 file(GLOB sources src/*.cpp)
 file(GLOB headers include/*.h)
 
-add_library(hurelimagerecon STATIC
+add_library(hurel-imagerecon STATIC
  ${sources}
  ${headers}
  )
 
-TARGET_LINK_LIBRARIES(hurelimagerecon cyusb usb-1.0 ${OpenCV_LIBS})
+
+TARGET_LINK_LIBRARIES(hurel-imagerecon PUBLIC
+        ${LIBRARIES}       
+         )

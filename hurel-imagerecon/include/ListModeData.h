@@ -5,9 +5,10 @@
 #include <time.h>
 #include <ctime>
 #include <vector>
+#include <Eigen/Core>
+#include <opencv4/opencv2/opencv.hpp>
 
-#include <opencv4/opencv2/core.hpp>
-#include <eigen3/Eigen/Core>
+#include "spdlog/spdlog.h"
 
 namespace HUREL {
 	namespace Compton {
@@ -73,4 +74,6 @@ namespace HUREL {
 
 	}
 }
+
+
 
