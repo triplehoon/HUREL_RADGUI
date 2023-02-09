@@ -1,11 +1,11 @@
 project(hurel-imagerecon)
 
 
-include_directories(include {OpenCV_INCLUDE_DIRS})
+include_directories(include)
 
 
 file(GLOB sources src/*.cpp)
-file(GLOB headers include/*.h)
+file(GLOB headers include/*.h )
 
 add_library(hurel-imagerecon STATIC
  ${sources}
@@ -14,5 +14,4 @@ add_library(hurel-imagerecon STATIC
 
 
 TARGET_LINK_LIBRARIES(hurel-imagerecon PUBLIC
-        ${LIBRARIES}       
          )

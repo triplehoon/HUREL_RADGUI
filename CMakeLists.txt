@@ -5,7 +5,7 @@ project(RADGUI_PROJECT)
 
 include_directories(./)
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -mavx2")
-SET(CMAKE_CXX_STANDARD 11)
+SET(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
 find_package(OpenMP)
@@ -17,7 +17,7 @@ if(NOT TARGET spdlog)
 endif()
 
 find_package(OpenCV 4 COMPONENTS core highgui imgproc imgcodecs REQUIRED)
-include_directories(${Opencv_INCLUDE_DIRS})
+include_directories(${OpenCV_INCLUDE_DIRS})
 
 set(EIGEN3_INCLUDE_DIR "/usr/local/include/eigen3")
 include_directories(${EIGEN3_INCLUDE_DIR})
@@ -53,6 +53,7 @@ fmt
 cyusb 
 usb-1.0 
 realsense2
+flann_cpp
 #boost
 )
 

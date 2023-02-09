@@ -1,16 +1,19 @@
 project(hurel-gui)
 
+# OpenGL
+find_package(OpenGL REQUIRED)
 
+# GLFW
+find_package(glfw3 REQUIRED)
+message(STATUS "Found GLFW3 in ${GLFW3_INCLUDE_DIR}")
 
 include_directories(
     include
-    ${CMAKE_SOURCE_DIR}/cruxell-communicate/include
     ${CMAKE_SOURCE_DIR}/hurel-imagerecon/include
-    ${OpenCV_INCLUDE_DIRS}
 )
 
-file(GLOB sources src/*.cpp)
-file(GLOB headers include/*.h)
+file(GLOB sources src/*.cpp src/*.c)
+file(GLOB headers include/*.h include/glad/*.h)
 
 
 
@@ -22,10 +25,13 @@ ${headers})
 
 
 TARGET_LINK_LIBRARIES(hurel-gui 
-                ${LIBRARIES}
+            hurel-imagerecon                
+            ${LIBRARIES}
+                glfw3
                 cyusb 
+                nfd
                 #usb-1.0                         
-                hurel-imagerecon
+                
                 )
 
 
