@@ -10,7 +10,6 @@
 
 #include "implot.h"
 
-
 #include "LahgiControl.h"
 
 static void glfw_error_callback(int error, const char *description)
@@ -20,26 +19,9 @@ static void glfw_error_callback(int error, const char *description)
 
 int main(int argv, char **argc)
 {
-
-    nfdchar_t *filePath = nullptr;
-    {
-        nfdresult_t result = NFD_OpenDialog(NULL, NULL, &filePath);
-        if (result == NFD_OKAY)
-        {
-            puts("Success!");
-        }
-        else if (result = NFD_CANCEL)
-        {
-            puts("Cancel");
-        }
-        else
-        {
-            printf("Error: %s\n", NFD_GetError());
-        }
-    }
     HUREL::Compton::LahgiControl &lahgi = HUREL::Compton::LahgiControl::instance();
 
-    lahgi.SetType(HUREL::Compton::eMouduleType::TEST);
+    lahgi.SetType(HUREL::Compton::eMouduleType::QUAD);
 
     // Setup window
     glfwSetErrorCallback(glfw_error_callback);
@@ -133,7 +115,6 @@ int main(int argv, char **argc)
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        
 
         // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
         if (show_demo_window)
@@ -150,7 +131,6 @@ int main(int argv, char **argc)
             {
                 ImGui::SetWindowPos(ImVec2(0, 0), 0);
                 ImGui::SetWindowSize(ImVec2(1600, 900), 0);
-
             }
 
             ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
@@ -171,31 +151,40 @@ int main(int argv, char **argc)
 
             ImGui::Separator();
 
-
-            
-
             ImGui::Text("This is some useful text.\n hello hurel gui"); // Display some text (you can use a format strings too)
-            ImGui::Checkbox("Demo Window", &show_demo_window);         // Edit bools storing our window open/close state
+            ImGui::Checkbox("Demo Window", &show_demo_window);          // Edit bools storing our window open/close state
             ImGui::Checkbox("Another Window", &show_another_window);
 
-            double* test = new double[5000];
-            
-            for (int i = 0; i < 5000; ++i) 
+            double *testX = new double[600];
+
+            double *testY = new double[600];
+          
+            std::vector<HUREL::Compton::BinningEnergy> spect = lahgi.GetSumEnergySpectrum().GetHistogramEnergy();
+            for (int i = 0; i < spect.size(); ++i)
             {
-                test[i] = 3000 * drand48();;
+                testX[i] = spect.at(i).Energy;
+                testY[i] = spect.at(i).Count;
             }
-            ImPlot::PushStyleColor(0, ImVec4(0,0,0,1));
-                        ImPlot::PushStyleColor(0, ImVec4(0,0,0,1));
+            ImPlot::PushStyleColor(0, ImVec4(0, 0, 0, 1));
+            ImPlot::PushStyleColor(0, ImVec4(0, 0, 0, 1));
 
             ImPlotFlags plotFlag = ImPlotFlags_None;
-            if (ImPlot::BeginPlot("Energy Spectrum", ImVec2(500,500), plotFlag))
-            {                
-                ImPlot::SetupAxes("Count [#]", "Energy [keV]");
-                ImPlot::PlotHistogram("Energy Spectrum", test, 5000, 600);           
+            if (ImPlot::BeginPlot("Energy Spectrum", ImVec2(500, 500), plotFlag))
+            {
+                ImPlot::SetupAxes("Count [#]", "Energy [keV]", 
+                ImPlotAxisFlags_::ImPlotAxisFlags_LockMax | ImPlotAxisFlags_::ImPlotAxisFlags_LockMin,
+                ImPlotAxisFlags_::ImPlotAxisFlags_LockMin);
+
                 
-                ImPlot::EndPlot();                
+                ImPlot::SetupAxisLimits(ImAxis_::ImAxis_X1, 0, 3000, ImPlotCond_::ImPlotCond_Once);
+                ImPlot::SetupAxisLimits(ImAxis_::ImAxis_Y1, 0, 3000, ImPlotCond_::ImPlotCond_Once);
+
+                ImPlot::PlotLine("module 1", testX, testY, 600);
+
+                ImPlot::EndPlot();
             }
-            delete[] test;
+            delete[] testX;
+            delete[] testY;
 
             ImGui::SliderFloat("float", &f, 0.0f, 1.0f);             // Edit 1 float using a slider from 0.0f to 1.0f
             ImGui::ColorEdit3("clear color", (float *)&clear_color); // Edit 3 floats representing a color
@@ -207,10 +196,31 @@ int main(int argv, char **argc)
 
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
+            nfdchar_t *filePath = nullptr;
 
-           
+            if (ImGui::Button("load"))
+            {
+                nfdresult_t result = NFD_OpenDialog(NULL, NULL, &filePath);
+                if (result == NFD_OKAY)
+                {
+                    puts("Success!");
+                    printf(filePath);
+                    lahgi.LoadListedListModeData(filePath);
+                }
+                else if (result = NFD_CANCEL)
+                {
+                    puts("Cancel");
+                }
+                else
+                {
+                    printf("Error: %s\n", NFD_GetError());
+                }
+            }
+            if (filePath != nullptr) {
+                ImGui::Text("%s", filePath);
+            }
 
-
+        
             ImGui::End();
         }
 
@@ -229,7 +239,7 @@ int main(int argv, char **argc)
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
         glViewport(0, 0, display_w, display_h);
-        //glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
+        // glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
         glClearColor(1.0, 1.0, 1.0, 0);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
