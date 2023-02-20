@@ -7,3 +7,4 @@ CMakeCache.txt
 install_manifest.txt
 /.vscode
 lib*.a
+/config

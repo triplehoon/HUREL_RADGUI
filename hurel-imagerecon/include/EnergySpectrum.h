@@ -13,13 +13,15 @@
 
 #include "EnergySpectrumData.h"
 
+#define ENERGY_SPECTRUM_BIN_SIZE 5
+#define ENERGY_SPECTRUM_MAX 3000
 
 namespace HUREL {
 	namespace Compton {
 		class EnergySpectrum
 		{
 		public:
-			EnergySpectrum() {}; //do nothing
+			EnergySpectrum();
 			EnergySpectrum(unsigned int binSize, double maxEnergy);
 			
 			std::vector<BinningEnergy> GetHistogramEnergy();

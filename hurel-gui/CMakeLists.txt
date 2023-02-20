@@ -5,11 +5,14 @@ find_package(OpenGL REQUIRED)
 
 # GLFW
 find_package(glfw3 REQUIRED)
+
+
 message(STATUS "Found GLFW3 in ${GLFW3_INCLUDE_DIR}")
 
 include_directories(
     include
     ${CMAKE_SOURCE_DIR}/hurel-imagerecon/include
+    ${CMAKE_SOURCE_DIR}/hurel-imagerecon/include/glad
 )
 
 file(GLOB sources src/*.cpp src/*.c)
@@ -29,9 +32,7 @@ TARGET_LINK_LIBRARIES(hurel-gui
             ${LIBRARIES}
                 glfw3
                 cyusb 
-                nfd
-                #usb-1.0                         
-                
+                nfd                                
                 )
 
 

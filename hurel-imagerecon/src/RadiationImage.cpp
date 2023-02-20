@@ -6,7 +6,7 @@ using namespace Eigen;
 constexpr double Det_W = 0.312;
 constexpr double Mask_W = 0.370;
 constexpr double Mpix = 37;
-constexpr double S2M = 1;
+constexpr double S2M = 2;
 constexpr double M2D = 0.07;
 constexpr double SP = S2M - M2D;// Source to Mask distance(mm)
 constexpr double M = 1 + M2D / S2M; // projection ratio((a + b) / a)
@@ -39,13 +39,13 @@ static cv::Mat CodedMaskMat()
 		{
 			for (int j = 0; j < 37; ++j)
 			{
-				if (HUREL::Compton::mCodeMask[i][j])
+				if (HUREL::Compton::mCodeMask[j][i])
 				{
-					mask.at<int>(j, 36 - i) = -1;
+					mask.at<int>(j, i) = 1;
 				}
 				else
 				{
-					mask.at<int>(j, 36 - i) = 1;
+					mask.at<int>(j, i) = -1;
 				}
 			}
 		}
@@ -133,7 +133,7 @@ cv::Mat HUREL::Compton::RadiationImage::GetCV_32SAsJet(cv::Mat img, int size)
 	return showImg;
 }
 
-cv::Mat HUREL::Compton::RadiationImage::GetCV_32SAsJet(cv::Mat img, int size, double minValuePortion)
+cv::Mat HUREL::Compton::RadiationImage::GetCV_32SAsJet(cv::Mat img, int sizeh, int sizew, double minValuePortion)
 {
 	cv::Mat showImg;
 	if (img.type() != CV_32S)
@@ -173,21 +173,17 @@ cv::Mat HUREL::Compton::RadiationImage::GetCV_32SAsJet(cv::Mat img, int size, do
 			auto& pixel = colorImg.at<cv::Vec4b>(i, j);
 			if (pixel[0] == 128 && pixel[1] == 0 && pixel[2] == 0)
 			{
+				pixel[0] = 0;
 				pixel[3] = 0;
+			}
+			else
+			{
+				pixel[3] = 255 * 0.9;
 			}
 		}
 	}
-	int sizeHeight = size;
-	int sizeWidth = size;
-
-	if (colorImg.size().height > colorImg.size().width)
-	{
-		sizeWidth = size * colorImg.size().width / colorImg.size().height;
-	}
-	else
-	{
-		sizeHeight = size * colorImg.size().height / colorImg.size().width;
-	}
+	int sizeHeight = sizeh;
+	int sizeWidth = sizew;
 
 	cv::resize(colorImg, showImg, cv::Size(sizeWidth, sizeHeight), 0, 0, cv::INTER_NEAREST);
 
@@ -206,7 +202,6 @@ HUREL::Compton::RadiationImage::RadiationImage(std::vector<ListModeData>& data)
 	#pragma omp parallel for
 	for (int i = 0; i < data.size(); ++i)
 	{
-
 		ListModeData& lm = data[i];
 		//if (lm.Scatter.InteractionEnergy + lm.Absorber.InteractionEnergy < 600 || lm.Scatter.InteractionEnergy + lm.Absorber.InteractionEnergy > 720)
 		//{
@@ -230,11 +225,8 @@ HUREL::Compton::RadiationImage::RadiationImage(std::vector<ListModeData>& data)
 				++responseImgPtr[PixelCount * iY + iX];
 				++codedImageCount;
 			}
-		}
-
-
-		
-		
+		}	
+				
 		if (lm.Type == eInterationType::COMPTON)
 		{	
 			if (lm.Scatter.InteractionEnergy + lm.Absorber.InteractionEnergy < 200)
@@ -259,7 +251,7 @@ HUREL::Compton::RadiationImage::RadiationImage(std::vector<ListModeData>& data)
 
 		}
 	}
-	//std::cout << "Lm Count: " << data.size() << " Coded count: " << codedImageCount << " Compton count: " << comptonImageCount << std::endl;
+	std::cout << "Lm Count: " << data.size() << " Coded count: " << codedImageCount << " Compton count: " << comptonImageCount << std::endl;
 	Mat scaleG;
 	cv::resize(CodedMaskMat(), scaleG, Size(37 * ResImprov, 37 * ResImprov), 0, 0, INTER_NEAREST);
 	Mat reconImg;
@@ -283,6 +275,7 @@ HUREL::Compton::RadiationImage::RadiationImage(std::vector<ListModeData>& data)
 	{
 		return;
 	}
+
 
 	mDetectorTransformation = data[0].DetectorTransformation;
 	mListedListModeData = data;
@@ -312,11 +305,15 @@ HUREL::Compton::RadiationImage::RadiationImage(std::vector<ListModeData>& data, 
 #pragma omp parallel for
 	for (int i = 0; i < data.size(); ++i)
 	{
-		ListModeData& lm = data[i];
+		ListModeData &lm = data[i];
 		if (lm.Type == eInterationType::CODED)
 		{
-			double& interactionPoseX = lm.Scatter.RelativeInteractionPoint[0];
-			double& interactionPoseY = lm.Scatter.RelativeInteractionPoint[1];
+			if (lm.Scatter.InteractionEnergy < 600 || lm.Scatter.InteractionEnergy > 720)
+			{
+				continue;
+			}
+			double &interactionPoseX = lm.Scatter.RelativeInteractionPoint[0];
+			double &interactionPoseY = lm.Scatter.RelativeInteractionPoint[1];
 
 			int iX = findIndex(interactionPoseX, -det_W / 2, det_W / pixelCount);
 			int iY = findIndex(interactionPoseY, -det_W / 2, det_W / pixelCount);
@@ -326,8 +323,6 @@ HUREL::Compton::RadiationImage::RadiationImage(std::vector<ListModeData>& data, 
 				++codedImageCount;
 			}
 		}
-
-
 
 		if (lm.Type == eInterationType::COMPTON)
 		{
@@ -360,7 +355,7 @@ HUREL::Compton::RadiationImage::RadiationImage(std::vector<ListModeData>& data, 
 			}
 		}
 	}
-	//std::cout << "Lm Count: " << data.size() << " Coded count: " << codedImageCount << " Compton count: " << comptonImageCount << std::endl;
+	std::cout << "Lm Count: " << data.size() << " Coded count: " << codedImageCount << " Compton count: " << comptonImageCount << std::endl;
 	Mat scaleG;
 	cv::resize(CodedMaskMat(), scaleG, Size(37 * resImprov, 37 * resImprov), 0, 0, INTER_NEAREST);
 	Mat reconImg;
@@ -423,7 +418,7 @@ HUREL::Compton::RadiationImage::RadiationImage(std::vector<ListModeData>& data, 
 	Filtered;
 
 	nonFiltered.convertTo(nonFiltered, CV_32F);
-	cv::GaussianBlur(nonFiltered, Filtered, Size(7, 7), 1.5);
+	cv::GaussianBlur(nonFiltered, Filtered, Size(7, 7), 3);
 	Filtered.convertTo(Filtered, CV_32S);
 	comptonImg = Filtered;
 
@@ -431,7 +426,7 @@ HUREL::Compton::RadiationImage::RadiationImage(std::vector<ListModeData>& data, 
 	nonFiltered = mCodedImage.mul(mComptonImage);
 	Filtered;
 	nonFiltered.convertTo(nonFiltered, CV_32F);
-	cv::GaussianBlur(nonFiltered, Filtered, Size(7, 7), 1.5);
+	cv::GaussianBlur(nonFiltered, Filtered, Size(7, 7), 20);
 	Filtered.convertTo(Filtered, CV_32S);
 
 

@@ -9,9 +9,12 @@ file(GLOB headers include/*.h )
 
 add_library(hurel-imagerecon STATIC
  ${sources}
- ${headers}
+ #${headers}
  )
+ message(STATUS "source: ${sources}")
 
 
 TARGET_LINK_LIBRARIES(hurel-imagerecon PUBLIC
+        ${LIBRARIES}
+
          )

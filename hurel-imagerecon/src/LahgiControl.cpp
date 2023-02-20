@@ -3,11 +3,10 @@
 #include <mutex>
 #include <open3d/visualization/utility/DrawGeometry.h>
 
-static std::mutex mListModeDataMutex;
-static std::mutex mResetListModeDataMutex;
-static std::mutex mListModeImageMutex;
+// static std::mutex mListModeDataMutex;
+// static std::mutex mResetListModeDataMutex;
+// static std::mutex mListModeImageMutex;
 static std::mutex mResetEnergySpectrumMutex;
-
 
 using namespace HUREL;
 using namespace Compton;
@@ -123,10 +122,10 @@ void HUREL::Compton::LahgiControl::ListModeDataListening()
 		}
 		if (tempVector.size() == 0)
 		{
+			std::this_thread::sleep_for(std::chrono::nanoseconds(1));
 			continue;
 		}
-		mListModeDataMutex.lock();
-		mResetEnergySpectrumMutex.lock();
+		mLiveSessionData.LockMutexAddingData();
 		eChksMutex.lock();
 
 		std::chrono::milliseconds timeInMili = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
@@ -138,11 +137,11 @@ void HUREL::Compton::LahgiControl::ListModeDataListening()
 			AddListModeDataWithTransformationLoop(tempVector[i], timeInMili, deviceTransformation);
 		}
 
-		mListModeDataMutex.unlock();
-		mResetEnergySpectrumMutex.unlock();
+		mLiveSessionData.UnlockMutexAddingData();
 		eChksMutex.unlock();
 		// printf("done\n");
 		tempVector.clear();
+		std::this_thread::sleep_for(std::chrono::nanoseconds(1));
 	}
 }
 
@@ -165,10 +164,7 @@ bool HUREL::Compton::LahgiControl::SetType(eMouduleType type)
 {
 	spdlog::info("C++::HUREL::Compton::LahgiControl: Set type");
 
-	mListModeDataMutex.lock();
-
-	mListedListModeData.reserve(50000);
-	mListModeDataMutex.unlock();
+	mLiveSessionData.Reset();
 	mModuleType = type;
 	bool successFlag = true;
 
@@ -194,16 +190,23 @@ bool HUREL::Compton::LahgiControl::SetType(eMouduleType type)
 			double gain[10];
 
 			double offsetZ = -(0.245);
-			mScatterModules[i] = new Module(eMouduleType::QUAD, "config\\QUAD", scatterSerial + std::string("_Scint") + std::to_string(i), xOffset[i], yOffset[i], -0.055);
+			mScatterModules[i] = new Module(eMouduleType::QUAD, "./config/QUAD", scatterSerial + std::string("_Scint") + std::to_string(i), xOffset[i], yOffset[i], -0.055);
 			if (!mScatterModules[i]->IsModuleSet())
 			{
 				successFlag = successFlag & false;
 			}
-			mAbsorberModules[i] = new Module(eMouduleType::QUAD, "config\\QUAD", absorberSerial + std::string("_Scint") + std::to_string(i), xOffset[i], yOffset[i], -0.055 + offsetZ);
+			mAbsorberModules[i] = new Module(eMouduleType::QUAD, "./config/QUAD", absorberSerial + std::string("_Scint") + std::to_string(i), xOffset[i], yOffset[i], -0.055 + offsetZ);
 			if (!mAbsorberModules[i]->IsModuleSet())
 			{
+
 				successFlag = successFlag & false;
 			}
+			
+		}
+
+		if (successFlag)
+		{
+			spdlog::info("Sucess fully load modules (Scatter: " + scatterSerial + ", Absorber: " + absorberSerial + ")");
 		}
 		break;
 	}
@@ -334,7 +337,7 @@ void HUREL::Compton::LahgiControl::AddListModeDataWithTransformationLoop(std::ar
 				EnergyTimeData eTime{i + 4, scattersEnergy[i], timeInMili};
 				mScatterModules[i]->GetEnergySpectrum().AddEnergy(scattersEnergy[i]);
 
-				mListedEnergyTimeData.push_back(eTime);
+				mLiveSessionData.AddEnergyTime(eTime);
 				scatterInteractModuleNum[scatterInteractionCount++] = i;
 			}
 			absorbersEnergy[i] = mAbsorberModules[i]->GetEcal(absorberShorts[i]);
@@ -343,7 +346,7 @@ void HUREL::Compton::LahgiControl::AddListModeDataWithTransformationLoop(std::ar
 				EnergyTimeData eTime{i + 12, absorbersEnergy[i], timeInMili};
 				mAbsorberModules[i]->GetEnergySpectrum().AddEnergy(absorbersEnergy[i]);
 
-				mListedEnergyTimeData.push_back(eTime);
+				mLiveSessionData.AddEnergyTime(eTime);
 				absorberInteractModuleNum[absorberInteractionCount++] = i;
 			}
 		}
@@ -365,8 +368,8 @@ void HUREL::Compton::LahgiControl::AddListModeDataWithTransformationLoop(std::ar
 
 						Eigen::Vector4d scatterPoint = mScatterModules[scatterInteractModuleNum[0]]->FastMLPosEstimation(scatterShorts[scatterInteractModuleNum[0]]);
 						Eigen::Vector4d absorberPoint = mAbsorberModules[absorberInteractModuleNum[0]]->FastMLPosEstimation(absorberShorts[absorberInteractModuleNum[0]]);
-
-						mListedListModeData.push_back(MakeListModeData(type, scatterPoint, absorberPoint, sEnergy, aEnergy, deviceTransformation, timeInMili));
+						ListModeData datum = MakeListModeData(type, scatterPoint, absorberPoint, sEnergy, aEnergy, deviceTransformation, timeInMili);
+						mLiveSessionData.AddListModeData(datum);
 					}
 				}
 
@@ -384,7 +387,8 @@ void HUREL::Compton::LahgiControl::AddListModeDataWithTransformationLoop(std::ar
 						Eigen::Vector4d scatterPoint = mScatterModules[scatterInteractModuleNum[0]]->FastMLPosEstimation(scatterShorts[scatterInteractModuleNum[0]]);
 						Eigen::Vector4d absorberPoint = Eigen::Vector4d(0, 0, 0, 1);
 						aEnergy = nan("");
-						mListedListModeData.push_back(MakeListModeData(type, scatterPoint, absorberPoint, sEnergy, aEnergy, deviceTransformation, timeInMili));
+						ListModeData datum = MakeListModeData(type, scatterPoint, absorberPoint, sEnergy, aEnergy, deviceTransformation, timeInMili);
+						mLiveSessionData.AddListModeData(datum);
 					}
 				}
 				// eChksMutex.unlock();
@@ -405,7 +409,8 @@ void HUREL::Compton::LahgiControl::AddListModeDataWithTransformationLoop(std::ar
 						eInterationType type = eInterationType::CODED;
 						Eigen::Vector4d scatterPoint = mScatterModules[scatterInteractModuleNum[interDet]]->FastMLPosEstimation(scatterShorts[scatterInteractModuleNum[interDet]]);
 						Eigen::Vector4d absorberPoint = Eigen::Vector4d(0, 0, 0, 1);
-						mListedListModeData.push_back(MakeListModeData(type, scatterPoint, absorberPoint, sEnergy, aEnergy, deviceTransformation, timeInMili));
+						ListModeData datum = MakeListModeData(type, scatterPoint, absorberPoint, sEnergy, aEnergy, deviceTransformation, timeInMili);
+						mLiveSessionData.AddListModeData(datum);
 					}
 				}
 			}
@@ -424,7 +429,7 @@ void HUREL::Compton::LahgiControl::AddListModeDataWithTransformationLoop(std::ar
 	}
 	}
 }
-
+/*
 void HUREL::Compton::LahgiControl::AddListModeDataWithTransformation(const unsigned short byteData[144])
 {
 	std::array<unsigned short, 144> pushData;
@@ -656,250 +661,44 @@ void HUREL::Compton::LahgiControl::AddListModeData(const unsigned short(byteData
 	}
 	}
 }
-void HUREL::Compton::LahgiControl::AddListModeDataEigen(const unsigned short(byteData)[144], Eigen::Matrix4d deviceTransformation)
-{
-}
-
+*/
 HUREL::Compton::eMouduleType HUREL::Compton::LahgiControl::GetDetectorType()
 {
 	return mModuleType;
 }
 
-const std::vector<ListModeData> HUREL::Compton::LahgiControl::GetListedListModeData() const
-{
-	mResetListModeDataMutex.lock();
-	size_t size = mListedListModeData.size();
-	std::vector<ListModeData> lmData;
-	lmData.reserve(size);
-	for (int i = 0; i < size; ++i)
-	{
-		lmData.push_back(mListedListModeData[i]);
-	}
-
-	mResetListModeDataMutex.unlock();
-	return lmData;
-}
-
 size_t HUREL::Compton::LahgiControl::GetListedListModeDataSize()
 {
-	return mListedListModeData.size();
-}
-
-const std::vector<ListModeData> HUREL::Compton::LahgiControl::GetListedListModeData(long long timeInMiliSecond) const
-{
-
-	if (timeInMiliSecond == 0)
-	{
-		return GetListedListModeData();
-	}
-
-	mResetListModeDataMutex.lock();
-	size_t size = mListedListModeData.size();
-	std::vector<ListModeData> lmData;
-	std::chrono::milliseconds t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
-	size_t getIndexStart = 0;
-	for (int i = size - 1; i > 0; --i)
-	{
-		if (t.count() - mListedEnergyTimeData[i].InteractionTimeInMili.count() > timeInMiliSecond)
-		{
-			getIndexStart = i;
-			break;
-		}
-	}
-
-	int reconStartIndex = 0;
-
-	lmData.reserve(size - getIndexStart);
-	for (int i = getIndexStart; i < size; ++i)
-	{
-		lmData.push_back(mListedListModeData[i]);
-	}
-
-	mResetListModeDataMutex.unlock();
-
-	return lmData;
+	return mLiveSessionData.GetSizeListedListModeData();
 }
 
 std::vector<ListModeData> HUREL::Compton::LahgiControl::GetListedListModeData()
 {
-	mResetListModeDataMutex.lock();
-
-	size_t size = mListedListModeData.size();
-	std::vector<ListModeData> lmData;
-	lmData.reserve(size);
-	for (int i = 0; i < size; ++i)
-	{
-		lmData.push_back(mListedListModeData[i]);
-	}
-	mResetListModeDataMutex.unlock();
-
-	return lmData;
+	return mLiveSessionData.GetListedListModeData(0);
 }
 
 std::vector<ListModeData> HUREL::Compton::LahgiControl::GetListedListModeData(long long timeInMililseconds)
 {
-	if (timeInMililseconds == 0)
-	{
-		return GetListedListModeData();
-	}
-	mResetListModeDataMutex.lock();
-
-	size_t size = mListedListModeData.size();
-	std::vector<ListModeData> lmData;
-	std::chrono::milliseconds t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
-	size_t getIndexStart = 0;
-	long long currentTime = t.count();
-	for (int i = size - 1; i > 0; --i)
-	{
-		long long interactionTime = mListedListModeData[i].InteractionTimeInMili.count();
-		if (currentTime - interactionTime > timeInMililseconds)
-		{
-			getIndexStart = i;
-			break;
-		}
-	}
-
-	int reconStartIndex = 0;
-
-	lmData.reserve(size - getIndexStart);
-	for (int i = getIndexStart; i < size; ++i)
-	{
-		lmData.push_back(mListedListModeData[i]);
-	}
-	mResetListModeDataMutex.unlock();
-
-	return lmData;
+	return mLiveSessionData.GetListedListModeData(timeInMililseconds);
 }
 
 std::vector<EnergyTimeData> HUREL::Compton::LahgiControl::GetListedEnergyTimeData(long long timeInMiliSecond)
 {
-	mResetListModeDataMutex.lock();
-
-	size_t size = mListedEnergyTimeData.size();
-	std::vector<EnergyTimeData> lmData;
-	std::chrono::milliseconds t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
-	size_t getIndexStart = 0;
-	for (int i = size - 1; i > 0; --i)
-	{
-		if (t.count() - mListedEnergyTimeData[i].InteractionTimeInMili.count() > timeInMiliSecond)
-		{
-			getIndexStart = i;
-			break;
-		}
-	}
-
-	int reconStartIndex = 0;
-
-	lmData.reserve(size - getIndexStart);
-	for (int i = getIndexStart; i < size; ++i)
-	{
-		lmData.push_back(mListedEnergyTimeData[i]);
-	}
-	mResetListModeDataMutex.unlock();
-	return lmData;
+	return mLiveSessionData.GetListedEnergyTimeData(timeInMiliSecond);
 }
 std::vector<EnergyTimeData> HUREL::Compton::LahgiControl::GetListedEnergyTimeData()
 {
-	mResetListModeDataMutex.lock();
-	std::vector<EnergyTimeData> lmData;
-
-	size_t size = mListedEnergyTimeData.size();
-
-	lmData.reserve(size);
-	for (int i = 0; i < size; ++i)
-	{
-		lmData.push_back(mListedEnergyTimeData[i]);
-	}
-	mResetListModeDataMutex.unlock();
-	return lmData;
-}
-const std::vector<EnergyTimeData> HUREL::Compton::LahgiControl::GetListedEnergyTimeData(long long timeInMiliSecond) const
-{
-	mResetListModeDataMutex.lock();
-
-	size_t size = mListedEnergyTimeData.size();
-	std::vector<EnergyTimeData> lmData;
-	std::chrono::milliseconds t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
-	size_t getIndexStart = 0;
-	for (int i = size - 1; i > 0; --i)
-	{
-		if (t.count() - mListedEnergyTimeData[i].InteractionTimeInMili.count() > timeInMiliSecond)
-		{
-			getIndexStart = i;
-			break;
-		}
-	}
-
-	int reconStartIndex = 0;
-
-	lmData.reserve(size - getIndexStart);
-	for (int i = getIndexStart; i < size; ++i)
-	{
-		lmData.push_back(mListedEnergyTimeData[i]);
-	}
-	mResetListModeDataMutex.unlock();
-	return lmData;
+	return mLiveSessionData.GetListedEnergyTimeData(0);
 }
 
 void HUREL::Compton::LahgiControl::ResetListedListModeData()
 {
-
-	mResetListModeDataMutex.lock();
-	mListModeDataMutex.lock();
-	mListedListModeData.clear();
-	mListedListModeData.shrink_to_fit();
-	mListedListModeData.reserve(50000);
-
-	mListedEnergyTimeData.clear();
-	mListedEnergyTimeData.shrink_to_fit();
-	mListedEnergyTimeData.reserve(50000);
-
-	mListModeDataMutex.unlock();
-	mResetListModeDataMutex.unlock();
+	mLiveSessionData.Reset();
 }
 
-void HUREL::Compton::LahgiControl::SaveListedListModeData(std::string fileName)
+void HUREL::Compton::LahgiControl::SaveListedListModeData(std::string fileDir)
 {
-	std::ofstream saveFile;
-	saveFile.open(fileName + "_LmData.csv");
-	if (!saveFile.is_open())
-	{
-		std::cout << "File is not opened" << std::endl;
-		saveFile.close();
-		return;
-	}
-	std::vector<ListModeData> data = this->GetListedListModeData();
-	for (unsigned int i = 0; i < data.size(); ++i)
-	{
-		ListModeData &d = data[i];
-		saveFile << d.WriteListModeData() << std::endl;
-	}
-	saveFile.close();
-
-	saveFile.open(fileName + "_LmEnergyData.csv");
-	if (!saveFile.is_open())
-	{
-		std::cout << "File is not opened" << std::endl;
-		saveFile.close();
-		return;
-	}
-	std::vector<EnergyTimeData> edata = this->GetListedEnergyTimeData();
-	for (unsigned int i = 0; i < edata.size(); ++i)
-	{
-		EnergyTimeData &d = edata[i];
-
-		 std::string line = "";
-		line += std::to_string(d.InteractionTimeInMili.count());
-		line += ",";
-		line += std::to_string(d.InteractionChannel);
-		line += ",";
-		line += std::to_string(d.Energy);
-
-		saveFile << line << std::endl;
-	}
-	saveFile.close();
-
-	return;
+	mLiveSessionData.Save(fileDir);
 }
 
 bool replace(std::string &str, const std::string &from, const std::string &to)
@@ -908,92 +707,6 @@ bool replace(std::string &str, const std::string &from, const std::string &to)
 	if (start_pos == std::string::npos)
 		return false;
 	str.replace(start_pos, from.length(), to);
-	return true;
-}
-
-bool HUREL::Compton::LahgiControl::LoadListedListModeData(std::string fileName)
-{
-	std::ifstream loadFile;
-	loadFile.open(fileName);
-	if (!loadFile.is_open())
-	{
-		spdlog::error("Load list mode data fail: fail to open the file");
-
-		loadFile.close();
-		return false;
-	}
-	mListedListModeData.clear();
-
-	for (int i = 0; i < 4; ++i)
-	{
-		mScatterModules[i]->GetEnergySpectrum().Reset();
-		mAbsorberModules[i]->GetEnergySpectrum().Reset();
-	}
-
-	 std::string buffer;
-	char line[2048];
-	while (loadFile.good())
-	{
-		ListModeData temp;
-		std::getline(loadFile, buffer);
-		if (temp.ReadListModeData(buffer))
-		{
-			mListedListModeData.push_back(temp);
-		}
-
-	}
-
-	loadFile.close();
-
-	std::string energyFileName = fileName;
-	replace(energyFileName, "_LmData", "_LmEnergyData");
-
-	loadFile.open(energyFileName);
-	if (!loadFile.is_open())
-	{
-		spdlog::error("Load list mode data fail: fail to open the file");
-
-		loadFile.close();
-		return false;
-	}
-
-
-	while (loadFile.good())
-	{
-		ListModeData temp;
-		std::getline(loadFile, buffer);
-		std::vector< std::string> words;
-		 std::stringstream sstream(buffer);
-		 std::string word;
-		while (getline(sstream, word, ','))
-		{
-			words.push_back(word);
-		}
-		if (words.size() != 3)
-		{
-			continue;;
-		}
-		std::chrono::milliseconds mili = std::chrono::milliseconds(stoll(words[0]));
-		int channel = stoi(words[1]);
-		double energy = stod(words[2]);
-
-		if (channel < 8)
-		{
-			mScatterModules[channel - 4]->GetEnergySpectrum().AddEnergy(energy);
-		} else 
-		{
-			mAbsorberModules[channel - 12]->GetEnergySpectrum().AddEnergy(energy);
-		}		
-	}
-
-	if (mListedListModeData.size() == 0)
-	{
-		spdlog::error("Load list mode data fail: there are no listmode data");
-
-		return false;
-	}
-
-	spdlog::info("C++HUREL::Compton::LahgiControl: Load lm data: {0}", fileName);
 	return true;
 }
 
@@ -1033,10 +746,10 @@ EnergySpectrum &HUREL::Compton::LahgiControl::GetEnergySpectrum(int fpgaChannelN
 		}
 		break;
 	default:
+		EnergySpectrum e = EnergySpectrum(5, 3000);
+		return e;
 		break;
 	}
-	EnergySpectrum e = EnergySpectrum(5, 3000);
-	return e;
 }
 
 EnergySpectrum HUREL::Compton::LahgiControl::GetSumEnergySpectrum()
@@ -1174,32 +887,32 @@ void HUREL::Compton::LahgiControl::SetEcalValue(int fpgaChannelNumber, std::tupl
 	case eMouduleType::MONO:
 		if (fpgaChannelNumber == 0)
 		{
-			mScatterModules[0]->SetEnergyCalibration( std::get<0>(ecal),  std::get<1>(ecal),  std::get<2>(ecal));
+			mScatterModules[0]->SetEnergyCalibration(std::get<0>(ecal), std::get<1>(ecal), std::get<2>(ecal));
 		}
 		else if (fpgaChannelNumber == 8)
 		{
-			mAbsorberModules[0]->SetEnergyCalibration( std::get<0>(ecal),  std::get<1>(ecal),  std::get<2>(ecal));
+			mAbsorberModules[0]->SetEnergyCalibration(std::get<0>(ecal), std::get<1>(ecal), std::get<2>(ecal));
 		}
 		break;
 
 	case eMouduleType::QUAD:
 		if (fpgaChannelNumber >= 4 && fpgaChannelNumber < 8)
 		{
-			mScatterModules[fpgaChannelNumber - 4]->SetEnergyCalibration( std::get<0>(ecal),  std::get<1>(ecal),  std::get<2>(ecal));
+			mScatterModules[fpgaChannelNumber - 4]->SetEnergyCalibration(std::get<0>(ecal), std::get<1>(ecal), std::get<2>(ecal));
 		}
 		else if (fpgaChannelNumber >= 12 && fpgaChannelNumber < 16)
 		{
-			mAbsorberModules[fpgaChannelNumber - 12]->SetEnergyCalibration( std::get<0>(ecal),  std::get<1>(ecal),  std::get<2>(ecal));
+			mAbsorberModules[fpgaChannelNumber - 12]->SetEnergyCalibration(std::get<0>(ecal), std::get<1>(ecal), std::get<2>(ecal));
 		}
 		break;
 	case eMouduleType::QUAD_DUAL:
 		if (fpgaChannelNumber >= 0 && fpgaChannelNumber < 8)
 		{
-			mScatterModules[fpgaChannelNumber]->SetEnergyCalibration( std::get<0>(ecal),  std::get<1>(ecal),  std::get<2>(ecal));
+			mScatterModules[fpgaChannelNumber]->SetEnergyCalibration(std::get<0>(ecal), std::get<1>(ecal), std::get<2>(ecal));
 		}
 		else if (fpgaChannelNumber >= 8 && fpgaChannelNumber < 16)
 		{
-			mAbsorberModules[fpgaChannelNumber - 8]->SetEnergyCalibration( std::get<0>(ecal),  std::get<1>(ecal),  std::get<2>(ecal));
+			mAbsorberModules[fpgaChannelNumber - 8]->SetEnergyCalibration(std::get<0>(ecal), std::get<1>(ecal), std::get<2>(ecal));
 		}
 		break;
 	default:
@@ -1209,14 +922,10 @@ void HUREL::Compton::LahgiControl::SetEcalValue(int fpgaChannelNumber, std::tupl
 
 void HUREL::Compton::LahgiControl::ResetEnergySpectrum()
 {
-	mResetEnergySpectrumMutex.lock();
-
 	for (int i = 0; i < 16; ++i)
 	{
 		ResetEnergySpectrum(i);
 	}
-
-	mResetEnergySpectrumMutex.unlock();
 }
 
 void HUREL::Compton::LahgiControl::ResetEnergySpectrum(int fpgaChannelNumber)
@@ -1259,7 +968,7 @@ void HUREL::Compton::LahgiControl::ResetEnergySpectrum(int fpgaChannelNumber)
 	}
 	return;
 }
-
+/*
 ReconPointCloud HUREL::Compton::LahgiControl::GetReconRealtimePointCloudComptonUntransformed(open3d::geometry::PointCloud &outPC, double seconds)
 {
 	HUREL::Compton::ReconPointCloud reconPC = HUREL::Compton::ReconPointCloud(outPC);
@@ -1343,10 +1052,8 @@ ReconPointCloud HUREL::Compton::LahgiControl::GetReconOverlayPointCloudCoded(ope
 	HUREL::Compton::ReconPointCloud reconPC = HUREL::Compton::ReconPointCloud(outPC);
 
 	std::chrono::milliseconds t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
-	mListModeImageMutex.lock();
 
 	std::vector<RadiationImage> tempLMData;
-	mListModeImageMutex.unlock();
 
 	// std::cout << "Start Recon (LM): " << tempLMData.size() << std::endl;
 	// std::cout << "Start Recon (PC): " << reconPC.points_.size() << std::endl;
@@ -1473,3 +1180,4 @@ cv::Mat HUREL::Compton::LahgiControl::GetResponseImage(int imgSize, int pixelCou
 
 	return HUREL::Compton::RadiationImage::GetCV_32SAsJet(responseImg, imgSize);
 }
+*/

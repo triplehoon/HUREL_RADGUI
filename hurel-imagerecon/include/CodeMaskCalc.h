@@ -1,5 +1,5 @@
 #pragma once
-#include <opencv4/opencv2/core.hpp>
+#include <opencv2/core.hpp>
 #include <Eigen/Core>
 
 #include "RadiationImage.h"

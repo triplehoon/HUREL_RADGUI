@@ -6,6 +6,23 @@ using namespace HUREL::Compton;
 
 std::mutex resetMutex;
 
+HUREL::Compton::EnergySpectrum::EnergySpectrum()
+{
+    unsigned int binSize = ENERGY_SPECTRUM_BIN_SIZE;
+    double maxEnergy = ENERGY_SPECTRUM_MAX;
+    assert(binSize > 0);
+    int binCount = static_cast<unsigned int>(maxEnergy / binSize);
+    mBinSize = static_cast<double>(binSize);
+    mMaxEnergy = maxEnergy;
+    for (unsigned long long i = 0; i < binCount + 1; ++i)
+    {
+        double energy = static_cast<double>(i * binSize + binSize / 2);
+
+        mEnergyBin.push_back(energy);
+        mHistogramEnergy.push_back(BinningEnergy{energy, 0});
+    }
+}
+
 HUREL::Compton::EnergySpectrum::EnergySpectrum(unsigned int binSize, double maxEnergy)
 {
     assert(binSize > 0);

@@ -1,12 +1,13 @@
 #pragma once
 
 #include <eigen3/Eigen/Core>
-#include <opencv4/opencv2/opencv.hpp>
+#include <opencv2/opencv.hpp>
 #include <open3d/geometry/Octree.h>
+
+#include <omp.h>
 
 #include "ListModeData.h"
 #include "ReconPointCloud.h"
-#include "LahgiControl.h"
 #include "spdlog/spdlog.h"
 
 
@@ -16,7 +17,6 @@ namespace HUREL {
 		using namespace cv;
 		using namespace Eigen;		
 	
-		class LahgiControl;
 		const static bool mCodeMask[37][37] = {
 		{false,true,true,false,false,false,false,true,false,true,false,true,true,true,true,false,false,true,true,false,true,true,false,false,false,false,true,false,true,false,true,true,true,true,false,false,true},
 		{true,false,false,true,true,true,true,false,true,false,true,false,false,false,false,true,true,false,true,true,false,false,true,true,true,true,false,true,false,true,false,false,false,false,true,true,false},
@@ -91,7 +91,7 @@ namespace HUREL {
 			Mat mHybridImage;
 		    static void ShowCV_32SAsJet(cv::Mat img, int size);
 			static cv::Mat GetCV_32SAsJet(cv::Mat img, int size);
-			static cv::Mat GetCV_32SAsJet(cv::Mat img, int size, double minValuePortion);
+			static cv::Mat GetCV_32SAsJet(cv::Mat img, int sizeh, int sizew, double minValuePortion);
 
 			RadiationImage(std::vector<ListModeData>& data);			
 			RadiationImage(std::vector<ListModeData>& data, double s2M, double det_W, double resImprov, double m2D, double hFov, double wFov);

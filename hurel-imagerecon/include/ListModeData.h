@@ -6,7 +6,7 @@
 #include <ctime>
 #include <vector>
 #include <Eigen/Core>
-#include <opencv4/opencv2/opencv.hpp>
+#include <opencv2/opencv.hpp>
 
 #include "spdlog/spdlog.h"
 

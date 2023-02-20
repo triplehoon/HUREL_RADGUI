@@ -26,9 +26,9 @@ HUREL::Compton::Module::Module(eMouduleType moduleType,
 	mIsModuleSet(false),
     mEnergySpectrum(EnergySpectrum(binSize, maxEnergy))
 {
-    mLutFileName = configDir + "\\LUT" + "\\" + moduleName + ".csv";
-    mGainFileName = configDir + "\\Gain" + "\\" + moduleName + ".csv";
-    mEcalFileName = configDir + "\\Ecal" + "\\" + moduleName + ".csv";
+    mLutFileName = configDir + "/LUT" + "/" + moduleName + ".csv";
+    mGainFileName = configDir + "/Gain" + "/" + moduleName + ".csv";
+    mEcalFileName = configDir + "/Ecal" + "/" + moduleName + ".csv";
 
     if (moduleType == eMouduleType::QUAD)
     {
@@ -47,7 +47,7 @@ HUREL::Compton::Module::Module(eMouduleType moduleType,
             }
 
             string msg = "Successfuly to load a gain file : " + moduleName;
-            spdlog::info("C++::HUREL::Compton::Module: {0}", msg);
+           //spdlog::info("C++::HUREL::Compton::Module: {0}", msg);
         }        
         else
         {
@@ -62,7 +62,7 @@ HUREL::Compton::Module::Module(eMouduleType moduleType,
 	{
 		//cout << "Module.cpp: Successfuly to load a lut file: " << moduleName << endl;
         string msg = "Successfuly to load a lut file: " + moduleName;
-        spdlog::info("C++::HUREL::Compton::Module: {0}", msg);
+        //spdlog::info("C++::HUREL::Compton::Module: {0}", msg);
 		mIsModuleSet = true;
 	}
 	else
@@ -76,7 +76,7 @@ HUREL::Compton::Module::Module(eMouduleType moduleType,
     {
         //cout << "Module.cpp: Successfuly to load a lut file: " << moduleName << endl;
         string msg = "Successfuly to load a ecal file: " + moduleName;
-        spdlog::info("C++::HUREL::Compton::Module: {0}", msg);
+        //spdlog::info("C++::HUREL::Compton::Module: {0}", msg);
 
         mIsModuleSet = true;
     }
@@ -617,4 +617,5 @@ bool HUREL::Compton::Module::SetGain(eMouduleType type, std::vector<double> gain
             mGain[i] = gain[i];
         }
     }
+    return true;
 }
