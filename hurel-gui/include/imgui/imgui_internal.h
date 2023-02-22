@@ -1,4 +1,4 @@
-// dear imgui, v1.89.3 WIP
+// dear imgui, v1.89.4 WIP
 // (internal structures/api)
 
 // You may use this file to debug, understand or extend Dear ImGui features but we don't provide any guarantee of forward compatibility.
@@ -93,6 +93,12 @@ Index of this file:
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpragmas"              // warning: unknown option after '#pragma GCC diagnostic' kind
 #pragma GCC diagnostic ignored "-Wclass-memaccess"      // [__GNUC__ >= 8] warning: 'memset/memcpy' clearing/writing an object of type 'xxxx' with no trivial copy-assignment; use assignment or value-initialization instead
+#endif
+
+// In 1.89.4, we moved the implementation of "courtesy maths operators" from imgui_internal.h in imgui.h
+// As they are frequently requested, we do not want to encourage to many people using imgui_internal.h
+#if defined(IMGUI_DEFINE_MATH_OPERATORS) && !defined(IMGUI_DEFINE_MATH_OPERATORS_IMPLEMENTED)
+#error Please '#define IMGUI_DEFINE_MATH_OPERATORS' _BEFORE_ including imgui.h!
 #endif
 
 // Legacy defines
@@ -318,8 +324,8 @@ namespace ImStb
 //-----------------------------------------------------------------------------
 
 // Helpers: Hashing
-IMGUI_API ImGuiID       ImHashData(const void* data, size_t data_size, ImU32 seed = 0);
-IMGUI_API ImGuiID       ImHashStr(const char* data, size_t data_size = 0, ImU32 seed = 0);
+IMGUI_API ImGuiID       ImHashData(const void* data, size_t data_size, ImGuiID seed = 0);
+IMGUI_API ImGuiID       ImHashStr(const char* data, size_t data_size = 0, ImGuiID seed = 0);
 
 // Helpers: Sorting
 #ifndef ImQsort
@@ -373,29 +379,6 @@ IMGUI_API int           ImTextStrFromUtf8(ImWchar* out_buf, int out_buf_size, co
 IMGUI_API int           ImTextCountCharsFromUtf8(const char* in_text, const char* in_text_end);                                 // return number of UTF-8 code-points (NOT bytes count)
 IMGUI_API int           ImTextCountUtf8BytesFromChar(const char* in_text, const char* in_text_end);                             // return number of bytes to express one char in UTF-8
 IMGUI_API int           ImTextCountUtf8BytesFromStr(const ImWchar* in_text, const ImWchar* in_text_end);                        // return number of bytes to express string in UTF-8
-
-// Helpers: ImVec2/ImVec4 operators
-// We are keeping those disabled by default so they don't leak in user space, to allow user enabling implicit cast operators between ImVec2 and their own types (using IM_VEC2_CLASS_EXTRA etc.)
-// We unfortunately don't have a unary- operator for ImVec2 because this would needs to be defined inside the class itself.
-#ifdef IMGUI_DEFINE_MATH_OPERATORS
-IM_MSVC_RUNTIME_CHECKS_OFF
-static inline ImVec2 operator*(const ImVec2& lhs, const float rhs)              { return ImVec2(lhs.x * rhs, lhs.y * rhs); }
-static inline ImVec2 operator/(const ImVec2& lhs, const float rhs)              { return ImVec2(lhs.x / rhs, lhs.y / rhs); }
-static inline ImVec2 operator+(const ImVec2& lhs, const ImVec2& rhs)            { return ImVec2(lhs.x + rhs.x, lhs.y + rhs.y); }
-static inline ImVec2 operator-(const ImVec2& lhs, const ImVec2& rhs)            { return ImVec2(lhs.x - rhs.x, lhs.y - rhs.y); }
-static inline ImVec2 operator*(const ImVec2& lhs, const ImVec2& rhs)            { return ImVec2(lhs.x * rhs.x, lhs.y * rhs.y); }
-static inline ImVec2 operator/(const ImVec2& lhs, const ImVec2& rhs)            { return ImVec2(lhs.x / rhs.x, lhs.y / rhs.y); }
-static inline ImVec2& operator*=(ImVec2& lhs, const float rhs)                  { lhs.x *= rhs; lhs.y *= rhs; return lhs; }
-static inline ImVec2& operator/=(ImVec2& lhs, const float rhs)                  { lhs.x /= rhs; lhs.y /= rhs; return lhs; }
-static inline ImVec2& operator+=(ImVec2& lhs, const ImVec2& rhs)                { lhs.x += rhs.x; lhs.y += rhs.y; return lhs; }
-static inline ImVec2& operator-=(ImVec2& lhs, const ImVec2& rhs)                { lhs.x -= rhs.x; lhs.y -= rhs.y; return lhs; }
-static inline ImVec2& operator*=(ImVec2& lhs, const ImVec2& rhs)                { lhs.x *= rhs.x; lhs.y *= rhs.y; return lhs; }
-static inline ImVec2& operator/=(ImVec2& lhs, const ImVec2& rhs)                { lhs.x /= rhs.x; lhs.y /= rhs.y; return lhs; }
-static inline ImVec4 operator+(const ImVec4& lhs, const ImVec4& rhs)            { return ImVec4(lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z, lhs.w + rhs.w); }
-static inline ImVec4 operator-(const ImVec4& lhs, const ImVec4& rhs)            { return ImVec4(lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z, lhs.w - rhs.w); }
-static inline ImVec4 operator*(const ImVec4& lhs, const ImVec4& rhs)            { return ImVec4(lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z, lhs.w * rhs.w); }
-IM_MSVC_RUNTIME_CHECKS_RESTORE
-#endif
 
 // Helpers: File System
 #ifdef IMGUI_DISABLE_FILE_FUNCTIONS
@@ -835,11 +818,13 @@ enum ImGuiItemStatusFlags_
     ImGuiItemStatusFlags_FocusedByTabbing   = 1 << 8,   // Set when the Focusable item just got focused by Tabbing (FIXME: to be removed soon)
     ImGuiItemStatusFlags_Visible            = 1 << 9,   // [WIP] Set when item is overlapping the current clipping rectangle (Used internally. Please don't use yet: API/system will change as we refactor Itemadd()).
 
+    // Additional status + semantic for ImGuiTestEngine
 #ifdef IMGUI_ENABLE_TEST_ENGINE
     ImGuiItemStatusFlags_Openable           = 1 << 20,  // Item is an openable (e.g. TreeNode)
-    ImGuiItemStatusFlags_Opened             = 1 << 21,  //
+    ImGuiItemStatusFlags_Opened             = 1 << 21,  // Opened status
     ImGuiItemStatusFlags_Checkable          = 1 << 22,  // Item is a checkable (e.g. CheckBox, MenuItem)
-    ImGuiItemStatusFlags_Checked            = 1 << 23,  //
+    ImGuiItemStatusFlags_Checked            = 1 << 23,  // Checked status
+    ImGuiItemStatusFlags_Inputable          = 1 << 24,  // Item is a text-inputable (e.g. InputText, SliderXXX, DragXXX)
 #endif
 };
 
@@ -1607,6 +1592,7 @@ struct ImGuiWindowSettings
     ImVec2ih    Size;
     bool        Collapsed;
     bool        WantApply;      // Set when loaded from .ini data (to enable merging/loading .ini data into an already running context)
+    bool        WantDelete;     // Set to invalidate/delete the settings entry
 
     ImGuiWindowSettings()       { memset(this, 0, sizeof(*this)); }
     char* GetName()             { return (char*)(this + 1); }
@@ -1944,9 +1930,11 @@ struct ImGuiContext
     ImFont                  InputTextPasswordFont;
     ImGuiID                 TempInputId;                        // Temporary text input when CTRL+clicking on a slider, etc.
     ImGuiColorEditFlags     ColorEditOptions;                   // Store user options for color edit widgets
-    float                   ColorEditLastHue;                   // Backup of last Hue associated to LastColor, so we can restore Hue in lossy RGB<>HSV round trips
-    float                   ColorEditLastSat;                   // Backup of last Saturation associated to LastColor, so we can restore Saturation in lossy RGB<>HSV round trips
-    ImU32                   ColorEditLastColor;                 // RGB value with alpha set to 0.
+    ImGuiID                 ColorEditCurrentID;                 // Set temporarily while inside of the parent-most ColorEdit4/ColorPicker4 (because they call each others).
+    ImGuiID                 ColorEditSavedID;                   // ID we are saving/restoring HS for
+    float                   ColorEditSavedHue;                  // Backup of last Hue associated to LastColor, so we can restore Hue in lossy RGB<>HSV round trips
+    float                   ColorEditSavedSat;                  // Backup of last Saturation associated to LastColor, so we can restore Saturation in lossy RGB<>HSV round trips
+    ImU32                   ColorEditSavedColor;                // RGB value with alpha set to 0.
     ImVec4                  ColorPickerRef;                     // Initial/reference color at the time of opening the color picker.
     ImGuiComboPreviewData   ComboPreviewData;
     float                   SliderGrabClickOffset;
@@ -2132,8 +2120,9 @@ struct ImGuiContext
 
         TempInputId = 0;
         ColorEditOptions = ImGuiColorEditFlags_DefaultOptions_;
-        ColorEditLastHue = ColorEditLastSat = 0.0f;
-        ColorEditLastColor = 0;
+        ColorEditCurrentID = ColorEditSavedID = 0;
+        ColorEditSavedHue = ColorEditSavedSat = 0.0f;
+        ColorEditSavedColor = 0;
         SliderGrabClickOffset = 0.0f;
         SliderCurrentAccum = 0.0f;
         SliderCurrentAccumDirty = false;
@@ -2509,14 +2498,15 @@ struct ImGuiTableCellData
     ImGuiTableColumnIdx         Column;     // Column number
 };
 
-// Per-instance data that needs preserving across frames (seemingly most others do not need to be preserved aside from debug needs, does that needs they could be moved to ImGuiTableTempData ?)
+// Per-instance data that needs preserving across frames (seemingly most others do not need to be preserved aside from debug needs. Does that means they could be moved to ImGuiTableTempData?)
 struct ImGuiTableInstanceData
 {
+    ImGuiID                     TableInstanceID;
     float                       LastOuterHeight;            // Outer height from last frame
     float                       LastFirstRowHeight;         // Height of first row from last frame (FIXME: this is used as "header height" and may be reworked)
     float                       LastFrozenHeight;           // Height of frozen section from last frame
 
-    ImGuiTableInstanceData()    { LastOuterHeight = LastFirstRowHeight = LastFrozenHeight = 0.0f; }
+    ImGuiTableInstanceData()    { TableInstanceID = 0; LastOuterHeight = LastFirstRowHeight = LastFrozenHeight = 0.0f; }
 };
 
 // FIXME-TABLE: more transient data could be stored in a stacked ImGuiTableTempData: e.g. SortSpecs, incoming RowData
@@ -2762,12 +2752,15 @@ namespace ImGui
     IMGUI_API void                  MarkIniSettingsDirty();
     IMGUI_API void                  MarkIniSettingsDirty(ImGuiWindow* window);
     IMGUI_API void                  ClearIniSettings();
-    IMGUI_API ImGuiWindowSettings*  CreateNewWindowSettings(const char* name);
-    IMGUI_API ImGuiWindowSettings*  FindWindowSettings(ImGuiID id);
-    IMGUI_API ImGuiWindowSettings*  FindOrCreateWindowSettings(const char* name);
     IMGUI_API void                  AddSettingsHandler(const ImGuiSettingsHandler* handler);
     IMGUI_API void                  RemoveSettingsHandler(const char* type_name);
     IMGUI_API ImGuiSettingsHandler* FindSettingsHandler(const char* type_name);
+
+    // Settings - Windows
+    IMGUI_API ImGuiWindowSettings*  CreateNewWindowSettings(const char* name);
+    IMGUI_API ImGuiWindowSettings*  FindWindowSettingsByID(ImGuiID id);
+    IMGUI_API ImGuiWindowSettings*  FindWindowSettingsByWindow(ImGuiWindow* window);
+    IMGUI_API void                  ClearWindowSettings(const char* name);
 
     // Localization
     IMGUI_API void          LocalizeRegisterEntries(const ImGuiLocEntry* entries, int count);
@@ -2801,6 +2794,7 @@ namespace ImGui
     IMGUI_API void          MarkItemEdited(ImGuiID id);     // Mark data associated to given item as "edited", used by IsItemDeactivatedAfterEdit() function.
     IMGUI_API void          PushOverrideID(ImGuiID id);     // Push given value as-is at the top of the ID stack (whereas PushID combines old and new hashes)
     IMGUI_API ImGuiID       GetIDWithSeed(const char* str_id_begin, const char* str_id_end, ImGuiID seed);
+    IMGUI_API ImGuiID       GetIDWithSeed(int n, ImGuiID seed);
 
     // Basic Helpers for widget code
     IMGUI_API void          ItemSize(const ImVec2& size, float text_baseline_y = -1.0f);
@@ -2996,7 +2990,8 @@ namespace ImGui
     IMGUI_API void          TableDrawContextMenu(ImGuiTable* table);
     IMGUI_API bool          TableBeginContextMenuPopup(ImGuiTable* table);
     IMGUI_API void          TableMergeDrawChannels(ImGuiTable* table);
-    inline ImGuiTableInstanceData*   TableGetInstanceData(ImGuiTable* table, int instance_no) { if (instance_no == 0) return &table->InstanceDataFirst; return &table->InstanceDataExtra[instance_no - 1]; }
+    inline ImGuiTableInstanceData*  TableGetInstanceData(ImGuiTable* table, int instance_no) { if (instance_no == 0) return &table->InstanceDataFirst; return &table->InstanceDataExtra[instance_no - 1]; }
+    inline ImGuiID                  TableGetInstanceID(ImGuiTable* table, int instance_no)   { return TableGetInstanceData(table, instance_no)->TableInstanceID; }
     IMGUI_API void          TableSortSpecsSanitize(ImGuiTable* table);
     IMGUI_API void          TableSortSpecsBuild(ImGuiTable* table);
     IMGUI_API ImGuiSortDirection TableGetColumnNextSortDirection(ImGuiTableColumn* column);
@@ -3008,7 +3003,7 @@ namespace ImGui
     IMGUI_API void          TableEndCell(ImGuiTable* table);
     IMGUI_API ImRect        TableGetCellBgRect(const ImGuiTable* table, int column_n);
     IMGUI_API const char*   TableGetColumnName(const ImGuiTable* table, int column_n);
-    IMGUI_API ImGuiID       TableGetColumnResizeID(const ImGuiTable* table, int column_n, int instance_no = 0);
+    IMGUI_API ImGuiID       TableGetColumnResizeID(ImGuiTable* table, int column_n, int instance_no = 0);
     IMGUI_API float         TableGetMaxColumnWidth(const ImGuiTable* table, int column_n);
     IMGUI_API void          TableSetColumnWidthAutoSingle(ImGuiTable* table, int column_n);
     IMGUI_API void          TableSetColumnWidthAutoAll(ImGuiTable* table);
@@ -3075,6 +3070,7 @@ namespace ImGui
     IMGUI_API bool          ArrowButtonEx(const char* str_id, ImGuiDir dir, ImVec2 size_arg, ImGuiButtonFlags flags = 0);
     IMGUI_API bool          ImageButtonEx(ImGuiID id, ImTextureID texture_id, const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1, const ImVec4& bg_col, const ImVec4& tint_col, ImGuiButtonFlags flags = 0);
     IMGUI_API void          SeparatorEx(ImGuiSeparatorFlags flags);
+    IMGUI_API void          SeparatorTextEx(ImGuiID id, const char* label, const char* label_end, float extra_width);
     IMGUI_API bool          CheckboxFlags(const char* label, ImS64* flags, ImS64 flags_value);
     IMGUI_API bool          CheckboxFlags(const char* label, ImU64* flags, ImU64 flags_value);
 

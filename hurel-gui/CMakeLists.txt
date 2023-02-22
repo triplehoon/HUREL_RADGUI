@@ -12,11 +12,12 @@ message(STATUS "Found GLFW3 in ${GLFW3_INCLUDE_DIR}")
 include_directories(
     include
     ${CMAKE_SOURCE_DIR}/hurel-imagerecon/include
-    ${CMAKE_SOURCE_DIR}/hurel-imagerecon/include/glad
+    ${CMAKE_SOURCE_DIR}/hurel-gui/include/glad
+    ${CMAKE_SOURCE_DIR}/hurel-gui/include/imgui
 )
 
-file(GLOB sources src/*.cpp src/*.c)
-file(GLOB headers include/*.h include/glad/*.h)
+file(GLOB sources src/*.cpp src/*.c src/imgui/*.cpp)
+file(GLOB headers include/*.h include/glad/*.h  include/imgui/*.h)
 
 
 

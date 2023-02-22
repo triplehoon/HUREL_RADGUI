@@ -91,8 +91,8 @@ namespace HUREL {
 			Mat mHybridImage;
 		    static void ShowCV_32SAsJet(cv::Mat img, int size);
 			static cv::Mat GetCV_32SAsJet(cv::Mat img, int size);
-			static cv::Mat GetCV_32SAsJet(cv::Mat img, int sizeh, int sizew, double minValuePortion);
-
+			static cv::Mat GetCV_32SAsJet(cv::Mat img, int sizeh, int sizew, double minValuePortion, double opacity);
+			RadiationImage() {};
 			RadiationImage(std::vector<ListModeData>& data);			
 			RadiationImage(std::vector<ListModeData>& data, double s2M, double det_W, double resImprov, double m2D, double hFov, double wFov);
 			double OverlayValue(Eigen::Vector3d point, eRadiationImagingMode mode);

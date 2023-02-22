@@ -133,7 +133,7 @@ cv::Mat HUREL::Compton::RadiationImage::GetCV_32SAsJet(cv::Mat img, int size)
 	return showImg;
 }
 
-cv::Mat HUREL::Compton::RadiationImage::GetCV_32SAsJet(cv::Mat img, int sizeh, int sizew, double minValuePortion)
+cv::Mat HUREL::Compton::RadiationImage::GetCV_32SAsJet(cv::Mat img, int sizeh, int sizew, double minValuePortion, double opacity)
 {
 	cv::Mat showImg;
 	if (img.type() != CV_32S)
@@ -178,7 +178,7 @@ cv::Mat HUREL::Compton::RadiationImage::GetCV_32SAsJet(cv::Mat img, int sizeh, i
 			}
 			else
 			{
-				pixel[3] = 255 * 0.9;
+				pixel[3] = 255 * opacity;
 			}
 		}
 	}
