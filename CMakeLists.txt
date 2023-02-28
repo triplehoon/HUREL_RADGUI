@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.2.2)
 project(RADGUI_PROJECT)
 
-
+find_package(catkin REQUIRED
+        )
+message(STATUS "rtabmap include libs: ${RTABMap_LIBRARIES}")
 
 include_directories(./)
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -mavx2")
@@ -16,7 +18,7 @@ if(NOT TARGET spdlog)
     find_package(spdlog REQUIRED)
 endif()
 
-find_package(OpenCV 4  COMPONENTS core highgui imgproc imgcodecs videoio REQUIRED) # 
+find_package(OpenCV 4.2  COMPONENTS core highgui imgproc imgcodecs videoio REQUIRED) # 
 include_directories(${OpenCV_INCLUDE_DIRS})
 message(STATUS "Opencv OpenCV_INCLUDE_DIRS: ${OpenCV_INCLUDE_DIRS}")
 
@@ -29,18 +31,14 @@ find_package(Open3D REQUIRED)
 include_directories(${OPEN3D_INCLUDE_DIRS})
 include_directories("/usr/local/include/open3d/3rdparty")
 
-
 find_package(RTABMap REQUIRED)
-include_directories("/usr/local/include/rtabmap-0.20")
+include_directories(${RTABMap_INCLUDE_DIRS})
 
-find_package(PCL 1.13 REQUIRED)
 
-message(STATUS "PCL PCL_LIBRARIES: ${PCL_LIBRARIES}")
-message(STATUS "open3d include dirs: ${Open3D_INCLUDE_DIRS}")
-message(STATUS "open3d include libs: ${Open3D_LIBRARIES}")
+# catkin_package(CATKIN_DEPENDS rtabmap)
+# include_directories("/opt/ros/noetic/include/rtabmap-0.20")
 
-message(STATUS "opencv include libs: ${OpenCV_LIBRARIES}")
-
+find_package(PCL 1.10 REQUIRED)
 include_directories(${PCL_INCLUDE_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
@@ -81,3 +79,17 @@ install(TARGETS fx3-bulk-test cruxell
          LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
  
  )   
+
+ message(STATUS "-----------------------------------------------------")
+message(STATUS "PCL include dir: ${PCL_INCLUDE_DIRS}")
+message(STATUS "PCL PCL_LIBRARIES: ${PCL_LIBRARIES}")
+message(STATUS "-----------------------------------------------------")
+message(STATUS "open3d include dirs: ${Open3D_INCLUDE_DIRS}")
+message(STATUS "open3d include libs: ${Open3D_LIBRARIES}")
+message(STATUS "-----------------------------------------------------")
+message(STATUS "opencv include dirs: ${OpenCV_INCLUDE_DIRS}")
+message(STATUS "opencv include libs: ${OpenCV_LIBRARIES}")
+message(STATUS "-----------------------------------------------------")
+message(STATUS "rtabmap include libs: ${RTABMap_LIBRARIES}")
+message(STATUS "rtabmap include dir: ${RTABMap_INCLUDE_DIRS}")
+message(STATUS "----------------------END----------------------------")
