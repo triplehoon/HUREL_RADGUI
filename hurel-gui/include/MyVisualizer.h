@@ -22,6 +22,10 @@ namespace HUREL
         void SetWindowPosition(int x, int y);
         void SetWindowSize(int w, int h);
         void SetWinodwVisibility(bool isVisible);
+
+        GLFWwindow * GetWindow();
+        bool InitOpenGL();
+
   
     };
     

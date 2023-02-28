@@ -16,7 +16,7 @@ if(NOT TARGET spdlog)
     find_package(spdlog REQUIRED)
 endif()
 
-find_package(OpenCV 4 COMPONENTS core highgui imgproc imgcodecs REQUIRED)
+find_package(OpenCV 4  COMPONENTS core highgui imgproc imgcodecs videoio REQUIRED) # 
 include_directories(${OpenCV_INCLUDE_DIRS})
 message(STATUS "Opencv OpenCV_INCLUDE_DIRS: ${OpenCV_INCLUDE_DIRS}")
 
@@ -36,26 +36,35 @@ include_directories("/usr/local/include/rtabmap-0.20")
 find_package(PCL 1.13 REQUIRED)
 
 message(STATUS "PCL PCL_LIBRARIES: ${PCL_LIBRARIES}")
-message(STATUS "PCL PCL_DIRS: ${Open3D_INCLUDE_DIRS}")
+message(STATUS "open3d include dirs: ${Open3D_INCLUDE_DIRS}")
+message(STATUS "open3d include libs: ${Open3D_LIBRARIES}")
+
+message(STATUS "opencv include libs: ${OpenCV_LIBRARIES}")
 
 include_directories(${PCL_INCLUDE_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
 
+# GLFW
+find_package(glfw3 REQUIRED)
+
+find_package(OpenGL REQUIRED)
 
 set(LIBRARIES
 ${RTABMap_LIBRARIES}
 ${PCL_LIBRARIES}
-${OpenCV_LIBS}
-${Open3D_LIBS}
+${OpenCV_LIBRARIES}
+${Open3D_LIBRARIES}
 tbb
-Open3D
+# Open3D
 OpenMP::OpenMP_CXX
 fmt
 cyusb 
 usb-1.0 
 realsense2
 flann_cpp
+glfw3
+${OPENGL_LIBRARY}
 #boost
 )
 
@@ -63,6 +72,8 @@ add_subdirectory(cruxell-communicate)
 add_subdirectory(fx3-bulk-test)
 add_subdirectory(hurel-imagerecon)
 add_subdirectory(hurel-gui)
+
+add_dependencies(hurel-gui  hurel-imagerecon)
 
 
 install(TARGETS fx3-bulk-test cruxell

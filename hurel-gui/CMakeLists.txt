@@ -3,9 +3,6 @@ project(hurel-gui)
 # OpenGL
 find_package(OpenGL REQUIRED)
 
-# GLFW
-find_package(glfw3 REQUIRED)
-
 
 message(STATUS "Found GLFW3 in ${GLFW3_INCLUDE_DIR}")
 
@@ -29,11 +26,10 @@ ${headers})
 
 
 TARGET_LINK_LIBRARIES(hurel-gui 
-            hurel-imagerecon                
             ${LIBRARIES}
-                glfw3
+                hurel-imagerecon                            
                 cyusb 
-                nfd                                
+                nfd                                                
                 )
 
 

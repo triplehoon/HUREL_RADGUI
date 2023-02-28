@@ -2,16 +2,15 @@
 // #include "glew.h"
 // #include "glad/glad.h"
 
-#include <open3d/Open3D.h>
-
-#include <iostream>
-#include <unistd.h>
-#include <future>
-
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+
+
+#include <iostream>
+#include <unistd.h>
+#include <future>
 
 #include "implot.h"
 
@@ -30,7 +29,6 @@ static void glfw_error_callback(int error, const char *description)
 {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
-
 
 int main(int argv, char **argc)
 {
@@ -53,7 +51,7 @@ int main(int argv, char **argc)
 
         spdlog::info(std::string("CWD: ") + cwd);
     }
-    //open3d::utility::SetVerbosityLevel(open3d::utility::VerbosityLevel::Debug);
+    // open3d::utility::SetVerbosityLevel(open3d::utility::VerbosityLevel::Debug);
     HUREL::Compton::LahgiControl &lahgi = HUREL::Compton::LahgiControl::instance();
 
     Eigen::Matrix4d testMatrix = Eigen::Matrix4d::Zero();
@@ -61,16 +59,20 @@ int main(int argv, char **argc)
 
     HUREL::Compton::SessionData *sessionData = nullptr;
     // Setup window
+
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
+    {
         return 1;
+    }
+        
 
     // GL 3.0 + GLSL 130
     // GL 3.2 + GLSL 150
     const char *glsl_version = "#version 150";
     glfwWindowHint(GLFW_SAMPLES, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // 3.2+ only
     // glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
 
@@ -101,6 +103,16 @@ int main(int argv, char **argc)
         return 1;
     }
     io.FontDefault = font;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+
+    ImGuiStyle &style = ImGui::GetStyle();
+    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+    {
+        style.WindowRounding = 0.0f;
+        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+    }
 
     // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForOpenGL(window, true);
@@ -113,7 +125,7 @@ int main(int argv, char **argc)
 
     std::vector<HUREL::Compton::ListModeData> lmData;
     HUREL::Compton::RadiationImage radData(lmData);
-  
+
     HUREL::MyVisualizer visualizer;
 
     auto pcdData = open3d::data::DemoICPPointClouds();
@@ -121,7 +133,7 @@ int main(int argv, char **argc)
     visualizer.InitOpenGL();
     visualizer.CreateVisualizerWindow("Point Cloud Viewer", 500, 500, 50, 50, true);
 
-    GLFWwindow *window2 = visualizer.window_;
+    GLFWwindow *window2 = visualizer.GetWindow();
 
     open3d::geometry::PointCloud pc;
     open3d::io::ReadPointCloud("../202211130509Cs137_Right_30degree/20220706_DigitalLabScan_500uCi_30s_1.07_0.08_2.09_Pointcloud.ply", pc);
@@ -180,15 +192,14 @@ int main(int argv, char **argc)
         ImVec2 open3dWindowSize = ImGui::GetContentRegionAvail();
         ImGui::End();
 
-
         HUREL::GUI::EnergySpectrumWindow(initial, sessionData);
 
         if (!HUREL::GUI::Reconstrcution2D(initial, sessionData))
         {
             return 1;
         }
-   
-        initial  = false;
+
+        initial = false;
 #pragma region rendering
 
         // Rendering imgui
@@ -200,6 +211,18 @@ int main(int argv, char **argc)
         glClear(GL_COLOR_BUFFER_BIT);
         glfwMakeContextCurrent(window);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        // Update and Render additional Platform Windows
+        // (Platform functions may change the current OpenGL context, so we save/restore it to make it easier to paste this code elsewhere.
+        //  For this specific demo app we could also call glfwMakeContextCurrent(window) directly)
+        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        {
+            GLFWwindow* backup_current_context = glfwGetCurrentContext();
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            glfwMakeContextCurrent(backup_current_context);
+        }
+
         glfwSwapBuffers(window);
 
         // if (!isSizeSet)
@@ -241,7 +264,7 @@ int main(int argv, char **argc)
         {
             visualizer.SetWinodwVisibility(true);
             visualizer.SetWindowSize(open3dWindowSize.x, open3dWindowSize.y);
-            visualizer.SetWindowPosition(windowXpos + open3dWindowPos.x, windowYpos + open3dWindowPos.y);
+            visualizer.SetWindowPosition(open3dWindowPos.x, open3dWindowPos.y);
         }
 
         visualizer.UpdateRender();
