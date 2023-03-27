@@ -3,10 +3,35 @@
 using namespace HUREL;
 using namespace Compton;
 
+inline int findPositionIndex(double value, double min, double max, int spaceCount)
+{
+
+    if (value - min <= 0)
+    {
+        return -1;
+    }
+    if (value - max >= 0)
+    {
+        return -1;
+    }
+    double pixelSize = (max - min) / spaceCount;
+    return static_cast<int>(floor((value - min) / pixelSize));
+}
+
+void HUREL::Compton::SessionData::SetNeedToUpatesAsTrue()
+{
+    mIsNeedToUpdateCountRate = true;
+}
+
 HUREL::Compton::SessionData::SessionData() : mIsLoaded(false),
                                              mLoadedDataStartTime(std::chrono::milliseconds::zero()),
-                                             mLoadFileDir("")
+                                             mLoadFileDir(""),
+                                             mListedEnergyTimeData(0),
+                                             mListedListModeData(0),
+                                             mIsNeedToUpdateCountRate(true)
 {
+    mListedEnergyTimeData.reserve(1000000);
+    mListedListModeData.reserve(1000000);
 }
 
 HUREL::Compton::SessionData::SessionData(std::string fileDir) : mIsLoaded(true)
@@ -31,6 +56,13 @@ HUREL::Compton::SessionData::SessionData(std::string fileDir) : mIsLoaded(true)
         std::getline(loadFile, buffer);
         if (temp.ReadListModeData(buffer))
         {
+            if (temp.Type == eInterationType::CODED)
+            {
+                if (temp.Scatter.InteractionEnergy < 662 || temp.Scatter.InteractionEnergy > 720)
+                {
+                    continue;
+                }
+            }
             mListedListModeData.push_back(temp);
         }
     }
@@ -63,15 +95,14 @@ HUREL::Compton::SessionData::SessionData(std::string fileDir) : mIsLoaded(true)
         {
             continue;
         }
-        
+
         EnergyTimeData datum;
-        datum.InteractionTimeInMili  = std::chrono::milliseconds(stoll(words[0]));
+        datum.InteractionTimeInMili = std::chrono::milliseconds(stoll(words[0]));
         datum.InteractionChannel = stoi(words[1]);
         datum.Energy = stod(words[2]);
         mListedEnergyTimeData.push_back(datum);
         mEnergySpectrums[datum.InteractionChannel].AddEnergy(datum.Energy);
     }
-    
 
     if (mListedListModeData.size() == 0)
     {
@@ -96,11 +127,14 @@ HUREL::Compton::SessionData::SessionData(std::string fileDir) : mIsLoaded(true)
     std::string depthimg = fileDir + "/depth.png";
     mDepthImage = cv::imread(colorimg, IMREAD_ANYDEPTH);
 
-    //need to load slam and realtime pointcloud;
+    // need to load slam and realtime pointcloud;
     mLoadFileDir = fileDir;
     mIsLoaded = true;
 
     spdlog::info("C++HUREL::Compton::LahgiControl: Load lm data: {0}", fileDir);
+    UpdateInteractionImage();
+    SetNeedToUpatesAsTrue();
+   
     return;
 }
 /*
@@ -162,6 +196,15 @@ bool HUREL::Compton::SessionData::Save(std::string fileDir)
     return true;
 }
 
+std::string HUREL::Compton::SessionData::GetLoadFileDir()
+{
+    if (mIsLoaded)
+    {
+        return mLoadFileDir;
+    }
+    return "Not loaded";
+}
+
 std::vector<ListModeData> HUREL::Compton::SessionData::GetListedListModeData()
 {
     mResetListModeDataMutex.lock();
@@ -175,6 +218,25 @@ std::vector<ListModeData> HUREL::Compton::SessionData::GetListedListModeData()
     }
     mResetListModeDataMutex.unlock();
 
+    return lmData;
+}
+
+std::vector<ListModeData> HUREL::Compton::SessionData::GetListedListModeData(sEnergyCheck echk)
+{
+    mResetListModeDataMutex.lock();
+
+    size_t size = mListedListModeData.size();
+    std::vector<ListModeData> lmData;
+    lmData.reserve(size);
+    for (int i = 0; i < size; ++i)
+    {
+        ListModeData &d = mListedListModeData[i];
+        if (d.EnergyCheck == echk)
+        {
+            lmData.push_back(d);
+        }
+    }
+    mResetListModeDataMutex.unlock();
     return lmData;
 }
 
@@ -194,8 +256,9 @@ std::vector<EnergyTimeData> HUREL::Compton::SessionData::GetListedEnergyTimeData
     return lmData;
 }
 
-std::vector<ListModeData> HUREL::Compton::SessionData::GetListedListModeData(long long timeInMililseconds)
+std::vector<ListModeData> HUREL::Compton::SessionData::GetListedListModeData(std::chrono::milliseconds timeInMililsecondsChrono)
 {
+    long long timeInMililseconds = timeInMililsecondsChrono.count();
     if (timeInMililseconds <= 0)
     {
         return GetListedListModeData();
@@ -229,24 +292,117 @@ std::vector<ListModeData> HUREL::Compton::SessionData::GetListedListModeData(lon
     return lmData;
 }
 
-std::vector<ListModeData> HUREL::Compton::SessionData::GetListedListModeDataCount(size_t count)
+std::vector<ListModeData> HUREL::Compton::SessionData::GetListedListModeData(std::chrono::milliseconds timeInMililsecondsChrono, sEnergyCheck echk)
 {
-    size_t size;
-    if (mListedListModeData.size() >= count)
+
+    long long timeInMililseconds = timeInMililsecondsChrono.count();
+    if (timeInMililseconds <= 0)
     {
-        size = count;
+        return GetListedListModeData(echk);
+    }
+    mResetListModeDataMutex.lock();
+
+    std::vector<ListModeData> lmData;
+
+    long long currentTime;
+    if (mIsLoaded)
+    {
+        currentTime = mLoadedDataLastTime.count();
     }
     else
     {
-        size = mListedListModeData.size();
+        std::chrono::milliseconds t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+        currentTime = t.count();
+    }
+
+    size_t getIndexStart = GetIndexOfTime(mListedListModeData, currentTime - timeInMililseconds);
+
+    size_t size = mListedListModeData.size();
+
+    lmData.reserve(size - getIndexStart);
+    for (int i = getIndexStart; i < size; ++i)
+    {
+        ListModeData &d = mListedListModeData[i];
+        if (d.EnergyCheck == echk)
+        {
+            lmData.push_back(d);
+        }
+    }
+    mResetListModeDataMutex.unlock();
+    return lmData;
+}
+
+std::vector<ListModeData> HUREL::Compton::SessionData::GetListedListModeData(size_t count)
+{
+    mResetListModeDataMutex.lock();
+
+    if (mListedListModeData.size() < count)
+    {
+        count = mListedListModeData.size();
     }
     std::vector<ListModeData> lmData;
-    lmData.reserve(size);
-    for (int i = mListedListModeData.size() - 1; i >= mListedListModeData.size() - size; --i)
+    if (count == 0)
+    {
+        mResetListModeDataMutex.unlock();
+        return lmData;
+    }
+    lmData.reserve(count);
+    for (int i = mListedListModeData.size() - 1; i >= mListedListModeData.size() - count; --i)
     {
         lmData.push_back(mListedListModeData[i]);
     }
+        mResetListModeDataMutex.unlock();
+
     return lmData;
+}
+
+std::vector<ListModeData> HUREL::Compton::SessionData::GetListedListModeData(size_t count, sEnergyCheck echk)
+{
+    mResetListModeDataMutex.lock();
+    if (mListedListModeData.size() < count)
+    {
+        count = mListedListModeData.size();
+    }
+    std::vector<ListModeData> lmData;
+    if (count == 0)
+    {
+        mResetListModeDataMutex.unlock();
+
+        return lmData;
+    }
+    lmData.reserve(count);
+    for (int i = mListedListModeData.size() - 1; i >= mListedListModeData.size() - count; --i)
+    {
+        ListModeData &d = mListedListModeData[i];
+        if (d.EnergyCheck == echk)
+        {
+            lmData.push_back(d);
+        }
+    }
+    mResetListModeDataMutex.unlock();
+
+    return lmData;
+}
+
+std::vector<std::vector<sInteractionData>> HUREL::Compton::SessionData::GetInteractionImages()
+{
+    mResetListModeDataMutex.lock();
+    std::vector<std::vector<sInteractionData>> tempImages;
+    if (mInteractionImages.size() == 0)
+    {
+        mResetListModeDataMutex.unlock();
+
+        return tempImages;
+    }
+    tempImages.reserve(mInteractionImages.size());
+    for (int i = 0; i < mInteractionImages.size(); ++i)
+    {
+        tempImages.push_back(mInteractionImages[i]);
+    }
+
+    mResetListModeDataMutex.unlock();
+
+    return tempImages;
 }
 
 std::vector<EnergyTimeData> HUREL::Compton::SessionData::GetListedEnergyTimeData(long long timeInMiliSecond)
@@ -274,6 +430,7 @@ std::vector<EnergyTimeData> HUREL::Compton::SessionData::GetListedEnergyTimeData
     size_t size = mListedEnergyTimeData.size();
 
     lmData.reserve(size - getIndexStart);
+
     for (int i = getIndexStart; i < size; ++i)
     {
         lmData.push_back(mListedEnergyTimeData[i]);
@@ -283,14 +440,115 @@ std::vector<EnergyTimeData> HUREL::Compton::SessionData::GetListedEnergyTimeData
     return lmData;
 }
 
+std::vector<double> HUREL::Compton::SessionData::GetCountRate()
+{
+    if (!mIsNeedToUpdateCountRate)
+    {
+        return mCountRate;
+    }
+    if (mListedListModeData.empty())
+    {
+        return std::vector<double>();
+    }
+
+    if (mCountRate.size() == 0)
+    {
+        std::chrono::milliseconds startTime = mListedEnergyTimeData[0].InteractionTimeInMili;
+        std::chrono::milliseconds endTime = mListedEnergyTimeData[mListedEnergyTimeData.size() - 1].InteractionTimeInMili;
+        std::chrono::milliseconds timeDiff2 = endTime - startTime;
+        if (timeDiff2.count() <= 0)
+        {
+            return std::vector<double>();
+        }
+
+        std::vector<double> countRate;
+        countRate.reserve(timeDiff2.count() / 500);
+
+        size_t index = 0;
+        for (int i = 0; i < timeDiff2.count(); i += 500)
+        {
+            size_t count = 0;
+            while (index < mListedEnergyTimeData.size() && mListedEnergyTimeData[index].InteractionTimeInMili.count() < startTime.count() + i)
+            {
+                ++index;
+            }
+            while (index < mListedEnergyTimeData.size() && mListedEnergyTimeData[index].InteractionTimeInMili.count() < startTime.count() + i + 500)
+            {
+                ++count;
+                ++index;
+            }
+            if (count == 0)
+            {
+                count = countRate[countRate.size() - 1] * 0.5 * 1000;
+            }
+            countRate.push_back(count / 0.5 / 1000);
+        }
+        mCountRate = countRate;
+        mIsNeedToUpdateCountRate = false;
+        return mCountRate;
+    }
+    else
+    {
+        std::vector<double> countRate = mCountRate;
+        long long elapsedTimeInMiliSecond = countRate.size() * 500;
+        std::chrono::milliseconds startTime = mListedEnergyTimeData[0].InteractionTimeInMili + std::chrono::milliseconds(startTime.count() + elapsedTimeInMiliSecond);
+        std::chrono::milliseconds endTime = mListedEnergyTimeData[mListedEnergyTimeData.size() - 1].InteractionTimeInMili;
+        size_t index = GetIndexOfTime(mListedEnergyTimeData, startTime.count());
+
+        std::chrono::milliseconds timeDiff2 = endTime - startTime;
+        for (int i = 0; i < timeDiff2.count(); i += 500)
+        {
+            size_t count = 0;
+            while (index < mListedEnergyTimeData.size() && mListedEnergyTimeData[index].InteractionTimeInMili.count() < startTime.count() + i)
+            {
+                ++index;
+            }
+            while (index < mListedEnergyTimeData.size() && mListedEnergyTimeData[index].InteractionTimeInMili.count() < startTime.count() + i + 500)
+            {
+                ++count;
+                ++index;
+            }
+            if (count == 0)
+            {
+                count = countRate[countRate.size() - 1] * 0.5 * 1000;
+            }
+            countRate.push_back(count / 0.5 / 1000);
+        }
+        mCountRate = countRate;
+        mIsNeedToUpdateCountRate = false;
+        return mCountRate;
+    }
+}
+
+std::chrono::milliseconds HUREL::Compton::SessionData::GetStartTime()
+{
+    if (mListedEnergyTimeData.size() > 0)
+    {
+        return mListedEnergyTimeData[0].InteractionTimeInMili;
+    }
+    return std::chrono::milliseconds();
+}
+
+std::chrono::milliseconds HUREL::Compton::SessionData::GetEndTime()
+{
+    if (mListedEnergyTimeData.size() > 0)
+    {
+        return mListedEnergyTimeData[mListedEnergyTimeData.size() - 1].InteractionTimeInMili;
+    }
+    return std::chrono::milliseconds();
+}
+
 void HUREL::Compton::SessionData::AddEnergyTime(EnergyTimeData &datum)
 {
     mListedEnergyTimeData.push_back(datum);
+    mEnergySpectrums[datum.InteractionChannel].AddEnergy(datum.Energy);
+    SetNeedToUpatesAsTrue();
 }
 
 void HUREL::Compton::SessionData::AddListModeData(ListModeData &datum)
 {
     mListedListModeData.push_back(datum);
+    SetNeedToUpatesAsTrue();
 }
 
 size_t HUREL::Compton::SessionData::GetIndexOfTime(tbb::concurrent_vector<ListModeData> &listedModeData, long long target)
@@ -346,6 +604,7 @@ size_t HUREL::Compton::SessionData::GetIndexOfTime(tbb::concurrent_vector<Energy
 
     return left;
 }
+
 void HUREL::Compton::SessionData::LockMutexAddingData()
 {
     mResetEnergySpectrumMutex.lock();
@@ -356,6 +615,71 @@ void HUREL::Compton::SessionData::UnlockMutexAddingData()
 {
     mResetListModeDataMutex.unlock();
     mResetEnergySpectrumMutex.unlock();
+}
+
+void HUREL::Compton::SessionData::UpdateInteractionImage()
+{
+    mResetListModeDataMutex.lock();
+    size_t startIndex = UpdateInteractionImageListedListModeDataIndex;
+
+    for (int i = startIndex; i < mListedListModeData.size(); ++i)
+    {
+        ListModeData &lmData = mListedListModeData[i];
+
+        if (lmData.Type != eInterationType::CODED)
+        {
+            continue;
+        }
+
+        int interactionEnergyIndex = -1;
+        for (int i = 0; i < mInteractionImages.size(); ++i)
+        {
+            if (mInteractionImages[i][0].EnergyCheck == mListedListModeData[i].EnergyCheck)
+            {
+                interactionEnergyIndex = i;
+                break;
+            }
+        }
+
+        int positionX = findPositionIndex(lmData.Scatter.RelativeInteractionPoint(0), -0.15, 0.15, 60);
+        int positionY = findPositionIndex(lmData.Scatter.RelativeInteractionPoint(1), -0.15, 0.15, 60);
+
+        if (positionX != -1 && positionY != -1)
+        {
+            if (interactionEnergyIndex == -1)
+            {
+                mInteractionImages.push_back(std::vector<sInteractionData>());
+                interactionEnergyIndex = mInteractionImages.size() - 1;
+                sInteractionData data;
+                data.StartInteractionTimeInMili = lmData.InteractionTimeInMili;
+                data.EndInteractionTimeInMili = lmData.InteractionTimeInMili;
+                data.DetectorTransformation = lmData.DetectorTransformation;
+                data.EnergyCheck = lmData.EnergyCheck;                
+                data.RelativeInteractionPoint(positionX, positionY) += 1;
+                mInteractionImages[interactionEnergyIndex].push_back(data);
+                continue;
+            }
+            size_t lastIndex = mInteractionImages[interactionEnergyIndex].size() - 1;
+            if (mInteractionImages[interactionEnergyIndex][lastIndex].DetectorTransformation.isApprox(lmData.DetectorTransformation))
+            {
+                mInteractionImages[interactionEnergyIndex][lastIndex].RelativeInteractionPoint(positionX, positionY) += 1;
+                mInteractionImages[interactionEnergyIndex][lastIndex].EndInteractionTimeInMili = lmData.InteractionTimeInMili;
+            }
+            else
+            {
+                sInteractionData data;
+                data.StartInteractionTimeInMili = lmData.InteractionTimeInMili;
+                data.EndInteractionTimeInMili = lmData.InteractionTimeInMili;
+                data.DetectorTransformation = lmData.DetectorTransformation;
+                data.EnergyCheck = lmData.EnergyCheck;
+                data.RelativeInteractionPoint(positionX, positionY) = 1;
+                mInteractionImages[interactionEnergyIndex].push_back(data);
+            }
+        }
+    }
+    UpdateInteractionImageListedListModeDataIndex = mListedListModeData.size();
+ 
+    mResetListModeDataMutex.unlock();
 }
 
 void HUREL::Compton::SessionData::Reset()
@@ -371,8 +695,17 @@ void HUREL::Compton::SessionData::Reset()
     mListedEnergyTimeData.shrink_to_fit();
     mListedEnergyTimeData.reserve(50000);
 
+    for (int i = 0; i < mInteractionImages.size(); ++i)
+    {
+        mInteractionImages[i].clear();
+    }
+    mInteractionImages.clear();
+
+    UpdateInteractionImageListedListModeDataIndex = 0;
+
     mResetListModeDataMutex.unlock();
     mResetEnergySpectrumMutex.unlock();
+    SetNeedToUpatesAsTrue();
 }
 
 void HUREL::Compton::SessionData::ResetSpectrum()
@@ -384,6 +717,7 @@ void HUREL::Compton::SessionData::ResetSpectrum()
     }
 
     mResetEnergySpectrumMutex.unlock();
+    SetNeedToUpatesAsTrue();
 }
 
 void HUREL::Compton::SessionData::ResetSpectrum(size_t fpgaChannel)
@@ -393,6 +727,7 @@ void HUREL::Compton::SessionData::ResetSpectrum(size_t fpgaChannel)
     mEnergySpectrums[fpgaChannel].Reset();
 
     mResetEnergySpectrumMutex.unlock();
+    SetNeedToUpatesAsTrue();
 }
 
 EnergySpectrum HUREL::Compton::SessionData::GetEnergySpectrum(size_t fpgaChannel)

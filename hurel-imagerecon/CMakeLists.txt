@@ -1,7 +1,9 @@
 project(hurel-imagerecon)
 
 
-include_directories(include)
+include_directories(include
+${CMAKE_SOURCE_DIR}/cruxell-communicate/include
+)
 
 
 file(GLOB sources src/*.cpp)
@@ -16,4 +18,5 @@ add_library(hurel-imagerecon STATIC
 
 TARGET_LINK_LIBRARIES(hurel-imagerecon PRIVATE
         ${LIBRARIES}
+        cruxell
         )

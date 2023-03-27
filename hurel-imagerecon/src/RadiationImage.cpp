@@ -93,7 +93,6 @@ void HUREL::Compton::RadiationImage::ShowCV_32SAsJet(cv::Mat img, int size)
 	cv::waitKey(0);
 }
 
-
 cv::Mat HUREL::Compton::RadiationImage::GetCV_32SAsJet(cv::Mat img, int size)
 {
 	cv::Mat showImg;
@@ -308,10 +307,10 @@ HUREL::Compton::RadiationImage::RadiationImage(std::vector<ListModeData>& data, 
 		ListModeData &lm = data[i];
 		if (lm.Type == eInterationType::CODED)
 		{
-			if (lm.Scatter.InteractionEnergy < 600 || lm.Scatter.InteractionEnergy > 720)
-			{
-				continue;
-			}
+			//if (lm.Scatter.InteractionEnergy < 600 || lm.Scatter.InteractionEnergy > 720)
+			//{
+			//	continue;
+			//}
 			double &interactionPoseX = lm.Scatter.RelativeInteractionPoint[0];
 			double &interactionPoseY = lm.Scatter.RelativeInteractionPoint[1];
 
@@ -359,7 +358,16 @@ HUREL::Compton::RadiationImage::RadiationImage(std::vector<ListModeData>& data, 
 	Mat scaleG;
 	cv::resize(CodedMaskMat(), scaleG, Size(37 * resImprov, 37 * resImprov), 0, 0, INTER_NEAREST);
 	Mat reconImg;
+
+	Mat drawImg;
+	//convert type to CV_32S
+	responseImg.convertTo(drawImg, CV_32S);
+	ShowCV_32SAsJet(drawImg, 1000);
+
 	cv::filter2D(responseImg, reconImg, CV_32S, scaleG);
+
+
+	
 
 	//reconImg = -reconImg;
 	double maxValue;
@@ -452,6 +460,161 @@ HUREL::Compton::RadiationImage::RadiationImage(std::vector<ListModeData>& data, 
 	mListedListModeData = data;
 }
 
+HUREL::Compton::RadiationImage::RadiationImage(sInteractionData &data, std::vector<ListModeData>& lmData, double s2M, double resImprov, double m2D, double hFov, double wFov)
+{
+	double m = 1 + m2D / s2M;
+	double reconPlaneWidth = s2M / m2D * 0.3;
+	double dproj = 0.3/ (Mask_W / Mpix * m); // projection mask to Detector pixel Length(mm)
+	int pixelCount = static_cast<int>(round(dproj * resImprov));
+
+
+
+	Mat comptonImg(pixelCount, pixelCount, CV_32S, Scalar(1));
+	int32_t* comptonImgPtr = static_cast<int32_t*>(static_cast<void*>(comptonImg.data));
+	int codedImageCount = 0;
+	int comptonImageCount = 0;
+
+	#pragma omp parallel for
+	for (int i = 0; i < lmData.size(); ++i)
+	{
+		ListModeData &lm = lmData[i];
+
+		if (lm.Type == eInterationType::COMPTON)
+		{
+			if (lm.Scatter.InteractionEnergy + lm.Absorber.InteractionEnergy < 400)
+			{
+				continue;
+			}
+			if (lm.Scatter.InteractionEnergy < 10)
+			{
+				continue;
+			}
+			++comptonImageCount;
+			double comptonScatterAngle = nan("");
+			double sigmacomptonScatteringAngle = nan("");
+			Eigen::Vector3d sToAVector;
+			double imagePlaneZ = s2M + 0.07;
+
+			for (int i = 0; i < pixelCount; ++i)
+			{
+				for (int j = 0; j < pixelCount; ++j)
+				{
+					double imagePlaneX = reconPlaneWidth / pixelCount * i + reconPlaneWidth / pixelCount * 0.5 - reconPlaneWidth / 2;
+					double imagePlaneY = reconPlaneWidth / pixelCount * j + reconPlaneWidth / pixelCount * 0.5 - reconPlaneWidth / 2;
+					Eigen::Vector3d imgPoint;
+					imgPoint[0] = imagePlaneX;
+					imgPoint[1] = imagePlaneY;
+					imgPoint[2] = imagePlaneZ;
+					comptonImgPtr[pixelCount * (pixelCount - j - 1) + pixelCount - i - 1] += ReconPointCloud::SimpleComptonBackprojectionUntransformed(lm, imgPoint, &comptonScatterAngle, &sigmacomptonScatteringAngle, &sToAVector);
+				}
+			}
+		}
+	}
+	Mat scaleG;
+	cv::resize(CodedMaskMat(), scaleG, Size(37 * resImprov, 37 * resImprov), 0, 0, INTER_NEAREST);
+	Mat reconImg;
+	Mat responseImg;
+
+	cv::eigen2cv(data.RelativeInteractionPoint, responseImg);
+	cv::flip(responseImg, responseImg, 1);
+	cv::rotate(responseImg, responseImg, ROTATE_90_COUNTERCLOCKWISE);
+	cv::resize(responseImg, responseImg, Size(pixelCount, pixelCount), 0, 0, INTER_LINEAR);
+
+	Mat drawImg;
+	//convert type to CV_32S
+	//responseImg.convertTo(drawImg, CV_32S);
+	//ShowCV_32SAsJet(drawImg, 1000);
+
+	cv::filter2D(responseImg, reconImg, CV_32S, scaleG);
+
+
+	//reconImg = -reconImg;
+	double maxValue;
+	//cv::minMaxLoc(reconImg, nullptr, &maxValue);
+	//Mat idxImg(pixelCount, pixelCount, CV_32S, Scalar(maxValue * 0.01));
+	//mCodedImage = reconImg;
+	//cv::max(reconImg, idxImg, mCodedImage);
+
+
+	double fovHeight = 2 * tan((hFov / 2) * M_PI / 180.0) * (s2M + m2D + 0.02);
+	double fovWidth = 2 * tan((wFov / 2) * M_PI / 180.0) * (s2M + m2D + 0.02);
+
+	//height correction
+	constexpr double heightDiff = 0.28;
+
+	double heightPixelSize = reconPlaneWidth / pixelCount;
+	int offSetPixelCount = heightDiff / heightPixelSize;
+
+	int heightPixelCount = pixelCount * (fovHeight / reconPlaneWidth);
+	int widthPixelCount = pixelCount * (fovWidth / reconPlaneWidth);
+
+	int minHeightPixleCount = (pixelCount - heightPixelCount) / 2 + offSetPixelCount;
+	int maxHeightPixleCount = (pixelCount + heightPixelCount) / 2 + offSetPixelCount;
+
+	if (minHeightPixleCount < 0)
+	{
+		minHeightPixleCount = 0;
+	}
+	if (maxHeightPixleCount > pixelCount)
+	{
+		maxHeightPixleCount = pixelCount;
+	}
+	if (widthPixelCount > pixelCount)
+	{
+		widthPixelCount = pixelCount;
+	}
+
+	mDetectorResponseImage = responseImg;
+	cv::Mat nonFiltered = reconImg;
+	cv::Mat Filtered;
+
+	nonFiltered.convertTo(nonFiltered, CV_32F);
+	cv::GaussianBlur(nonFiltered, Filtered, Size(7, 7), 1.5);
+	Filtered.convertTo(Filtered, CV_32S);
+	reconImg = Filtered;
+
+	mCodedImage = reconImg(Range(minHeightPixleCount, maxHeightPixleCount), Range((pixelCount - widthPixelCount) / 2, (pixelCount + widthPixelCount) / 2));
+	
+
+	nonFiltered.convertTo(nonFiltered, CV_32F);
+	cv::GaussianBlur(nonFiltered, Filtered, Size(7, 7), 1.5);
+	Filtered.convertTo(Filtered, CV_32S);
+	reconImg = Filtered;
+
+	nonFiltered = comptonImg;
+	Filtered;
+
+	nonFiltered.convertTo(nonFiltered, CV_32F);
+	cv::GaussianBlur(nonFiltered, Filtered, Size(7, 7), 3);
+	Filtered.convertTo(Filtered, CV_32S);
+	comptonImg = Filtered;
+
+	mComptonImage = comptonImg(Range(minHeightPixleCount, maxHeightPixleCount), Range((pixelCount - widthPixelCount) / 2, (pixelCount + widthPixelCount) / 2));
+	nonFiltered = mCodedImage.mul(mComptonImage);
+	Filtered;
+	nonFiltered.convertTo(nonFiltered, CV_32F);
+	cv::GaussianBlur(nonFiltered, Filtered, Size(7, 7), 20);
+	Filtered.convertTo(Filtered, CV_32S);
+
+
+	double minVal;
+	double maxVal;
+	Point minLoc;
+	Point maxLoc;
+
+	minMaxLoc(Filtered, &minVal, &maxVal, &minLoc, &maxLoc);
+	if (maxVal > 400)
+	{
+	}
+
+	mHybridImage = Filtered;
+
+	spdlog::info("RadImage: Hybrid Max: " + std::to_string(maxVal));
+
+	mDetectorTransformation = data.DetectorTransformation;
+	mListedListModeData = lmData;
+
+}
 
 double HUREL::Compton::RadiationImage::OverlayValue(Eigen::Vector3d point, eRadiationImagingMode mode)
 {

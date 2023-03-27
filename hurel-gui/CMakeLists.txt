@@ -8,6 +8,7 @@ message(STATUS "Found GLFW3 in ${GLFW3_INCLUDE_DIR}")
 
 include_directories(
     include
+    ${CMAKE_SOURCE_DIR}/cruxell-communicate/include
     ${CMAKE_SOURCE_DIR}/hurel-imagerecon/include
     ${CMAKE_SOURCE_DIR}/hurel-gui/include/glad
     ${CMAKE_SOURCE_DIR}/hurel-gui/include/imgui
@@ -27,7 +28,8 @@ ${headers})
 
 TARGET_LINK_LIBRARIES(hurel-gui 
             ${LIBRARIES}
-                hurel-imagerecon                            
+                hurel-imagerecon    
+                cruxell
                 cyusb 
                 nfd                                                
                 )

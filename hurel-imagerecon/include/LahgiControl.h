@@ -12,6 +12,7 @@
 #include "ListModeData.h"
 #include "ReconPointCloud.h"
 #include "SessionData.h"
+#include "cruxellIO.h"
 
 #include <iostream>
 #include <vector>
@@ -29,11 +30,6 @@ namespace HUREL
 {
 	namespace Compton
 	{
-		struct sEnergyCheck
-		{
-			double minE;
-			double maxE;
-		};
 
 		class LahgiControl
 		{
@@ -43,10 +39,10 @@ namespace HUREL
 			eMouduleType mModuleType;
 			// tbb::concurrent_vector <ListModeData> mListedListModeData;
 			// tbb::concurrent_vector <EnergyTimeData> mListedEnergyTimeData;
-
+			CRUXELL::CruxellIO mCruxellIO;
 			LahgiControl();
-			inline static ListModeData MakeListModeData(const eInterationType &iType, Eigen::Vector4d &scatterPoint, Eigen::Vector4d &absorberPoint, double &scatterEnergy, double &absorberEnergy, Eigen::Matrix4d &transformation, std::chrono::milliseconds &timeInMili);
-			inline static ListModeData MakeListModeData(const eInterationType &iType, Eigen::Vector4d &scatterPoint, Eigen::Vector4d &absorberPoint, double &scatterEnergy, double &absorberEnergy, Eigen::Matrix4d &transformation);
+			inline static ListModeData MakeListModeData(const eInterationType &iType, Eigen::Vector4d &scatterPoint, Eigen::Vector4d &absorberPoint, double &scatterEnergy, double &absorberEnergy, Eigen::Matrix4d &transformation, std::chrono::milliseconds &timeInMili, sEnergyCheck& echk);
+			
 			// CodeMaks Setting
 			double mMaskThickness = 0.006;
 
@@ -64,9 +60,10 @@ namespace HUREL
 			SessionData mLiveSessionData;
 
 			void AddListModeDataWithTransformationLoop(std::array<unsigned short, 144> byteData, std::chrono::milliseconds &timeInMili, Eigen::Matrix4d &deviceTransformation);
+			
+			
 			/*
-			void AddListModeData(const unsigned short(byteData)[144], Eigen::Matrix4d deviceTransformation);
-			void AddListModeDataWithTransformation(const unsigned short byteData[144]);
+			void AddListModeData(const unsigned short(byteData)[144], Eigen::Matrix4d deviceTransformation);			
 			void AddListModeDataWithTransformationVerification(const unsigned short byteData[]);
 			*/
 		
@@ -82,16 +79,8 @@ namespace HUREL
 
 			eMouduleType GetDetectorType();
 
-			std::vector<ListModeData> GetListedListModeData();
-			std::vector<ListModeData> GetListedListModeData(long long timeInMililseconds);
-
-			std::vector<EnergyTimeData> GetListedEnergyTimeData();
-			std::vector<EnergyTimeData> GetListedEnergyTimeData(long long timeInMililseconds);
-
 			size_t GetListedListModeDataSize();
-
-			void ResetListedListModeData();
-			void SaveListedListModeData(std::string fileDir);
+			
 
 			EnergySpectrum &GetEnergySpectrum(int fpgaChannelNumber);
 			EnergySpectrum GetSumEnergySpectrum();
@@ -102,6 +91,17 @@ namespace HUREL
 			void SetEcalValue(int fpgaChannelNumber, std::tuple<double, double, double> ecal);
 			void ResetEnergySpectrum();
 			void ResetEnergySpectrum(int fpgaChannelNumber);
+
+
+			void AddShortByteData(const unsigned short* byteData);
+
+			SessionData& GetLiveSessionData();
+
+			bool StartSession();
+
+			void StopSession();
+
+
 
 			ReconPointCloud GetReconRealtimePointCloudComptonUntransformed(open3d::geometry::PointCloud &pc, double time);
 			ReconPointCloud GetReconRealtimePointCloudCompton(open3d::geometry::PointCloud &pc, double time);

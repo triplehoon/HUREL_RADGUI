@@ -2,6 +2,8 @@
 
 #include <eigen3/Eigen/Core>
 #include <opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/core/eigen.hpp>
 #include <open3d/geometry/Octree.h>
 
 #include <omp.h>
@@ -95,6 +97,8 @@ namespace HUREL {
 			RadiationImage() {};
 			RadiationImage(std::vector<ListModeData>& data);			
 			RadiationImage(std::vector<ListModeData>& data, double s2M, double det_W, double resImprov, double m2D, double hFov, double wFov);
+			RadiationImage(sInteractionData& data, std::vector<ListModeData>& lmData, double s2M, double resImprov, double m2D, double hFov, double wFov);
+
 			double OverlayValue(Eigen::Vector3d point, eRadiationImagingMode mode);
 
 			static void OverlayRadimgToP3(cv::Mat& p3, const cv::Mat& radImg);

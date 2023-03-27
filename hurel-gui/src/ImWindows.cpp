@@ -12,8 +12,6 @@ void HUREL::GUI::EnergySpectrumWindow(bool initial, Compton::SessionData *&sessi
 
     ImGui::Begin("에너지 스펙트럼", nullptr, ImGuiWindowFlags_NoBringToFrontOnFocus); // Create a window called "Hello, world!" and append into it.
 
-
-
     if (sessionDataOrNull != nullptr)
     {
         std::vector<HUREL::Compton::BinningEnergy> spect = sessionDataOrNull->GetEnergySpectrum(nullptr, 0, 0).GetHistogramEnergy();
@@ -99,7 +97,7 @@ void overlayImage(const cv::Mat &background, const cv::Mat &foreground, cv::Mat 
                     foreground.data[fY * foreground.step + fX * foreground.channels() + c];
                 unsigned char backgroundPx =
                     background.data[y * background.step + x * background.channels() + c];
-                    
+
                 output.data[y * output.step + output.channels() * x + c] =
                     backgroundPx * (1. - opacity) + foregroundPx * opacity;
             }
@@ -109,7 +107,6 @@ void overlayImage(const cv::Mat &background, const cv::Mat &foreground, cv::Mat 
 
 bool HUREL::GUI::Reconstrcution2D(bool initial, Compton::SessionData *&sessionDataOrNUll)
 {
-    static bool isImageGet;
     static bool isGrayScale;
     static float s2M;
     static float det_W;
@@ -128,6 +125,11 @@ bool HUREL::GUI::Reconstrcution2D(bool initial, Compton::SessionData *&sessionDa
     static std::vector<HUREL::Compton::ListModeData> lmData;
     static HUREL::Compton::RadiationImage radData;
 
+    static int effectiveCount;
+
+    static bool recon2dFutreReady;
+    static std::future<void> recon2dFuture;
+
     if (initial)
     {
         isImageGet = false;
@@ -144,94 +146,107 @@ bool HUREL::GUI::Reconstrcution2D(bool initial, Compton::SessionData *&sessionDa
 
         minPortion = 0.9;
         opacity = 0.5;
+        effectiveCount  = 1000;
+        recon2dFutreReady = true;
+        glGenTextures(1, &texture2);
     }
 
     Compton::SessionData *&sessionData = sessionDataOrNUll;
     ImGui::Begin("Recon Image", nullptr, ImGuiWindowFlags_NoBringToFrontOnFocus);
-    ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-
     // ImGui::SetWindowPos(ImVec2(1000, 0), ImGuiCond_Once);
-
-    nfdchar_t *fileDir = nullptr;
     if (sessionData != nullptr)
     {
 
         if (!isImageGet)
         {
-            lmData = sessionData->GetListedListModeDataCount(10000);
-            spdlog::info("get listed list mode data done");
-            radData = HUREL::Compton::RadiationImage(lmData, s2M, det_W, resImprov, m2D, hFov, wFov);
-            spdlog::info("image recon done");
-            isImageGet = true;
 
-            image = sessionData->mRgbImage;
-            glGenTextures(1, &texture);
-            glBindTexture(GL_TEXTURE_2D, texture);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, image.cols, image.rows, 0, GL_BGR, GL_UNSIGNED_BYTE, image.data);
-            if (isGrayScale)
+            if (recon2dFutreReady)
             {
-                cv::cvtColor(image, image, cv::ColorConversionCodes::COLOR_BGR2GRAY);
-                cv::cvtColor(image, image, cv::ColorConversionCodes::COLOR_GRAY2BGRA);
+                recon2dFutreReady = false;
+                if (!mIsRealtimeRun)
+                {
+                    recon2dFuture = std::async(std::launch::async, [&]()
+                                           {
+                    lmData = sessionData->GetListedListModeData(effectiveCount);
+                    auto interData = sessionData->GetInteractionImages();
+                    spdlog::info("get listed list mode data done");
+
+                    //radData = HUREL::Compton::RadiationImage(lmData, s2M, det_W, resImprov, m2D, hFov, wFov);
+                    radData = HUREL::Compton::RadiationImage(interData[0][0], lmData, s2M, resImprov, m2D, hFov, wFov);
+                    spdlog::info("image recon done");
+
+                    image = sessionData->mRgbImage;
+                    if (!image.empty())
+                    {
+                        if (isGrayScale)
+                        {
+                            cv::cvtColor(image, image, cv::ColorConversionCodes::COLOR_BGR2GRAY);
+                            cv::cvtColor(image, image, cv::ColorConversionCodes::COLOR_GRAY2BGRA);
+                        }
+                        else
+                        {
+                            cv::cvtColor(image, image, cv::ColorConversionCodes::COLOR_BGR2BGRA);
+                        }
+                        radImage = HUREL::Compton::RadiationImage::GetCV_32SAsJet(radData.mCodedImage, image.rows, image.cols, minPortion, opacity);
+
+                        overlayImage(image, radImage, radImageOveray);                       
+                    } 
+                    });
+                }
+                else
+                {
+                    //realtime Run
+                    if (sessionData->GetSizeListedEnergyTimeData() == 0)
+                    {
+                        //do nothing
+                    }
+                    else
+                    {
+
+                    }
+               
+                }
+                
+            }
+
+            if (recon2dFuture.valid())
+            {
+                ImGui::Text("Reconstrcution 2D...........");
+                if (recon2dFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+                {
+                    recon2dFuture.get();
+                    isImageGet = true;
+                    recon2dFutreReady = true;
+
+                    glBindTexture(GL_TEXTURE_2D, texture2);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, radImageOveray.cols, radImageOveray.rows, 0, GL_BGRA, GL_UNSIGNED_BYTE, radImageOveray.data);
+                }
             }
             else
             {
-                cv::cvtColor(image, image, cv::ColorConversionCodes::COLOR_BGR2BGRA);
+                ImGui::Text("Done Reconstrcution 2D");
             }
-
-            
-
-            radImage = HUREL::Compton::RadiationImage::GetCV_32SAsJet(radData.mHybridImage, image.rows, image.cols, minPortion, opacity);
-
-            overlayImage(image, radImage, radImageOveray);
-            glGenTextures(1, &texture2);
-            glBindTexture(GL_TEXTURE_2D, texture2);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, radImageOveray.cols, radImageOveray.rows, 0, GL_BGRA, GL_UNSIGNED_BYTE, radImageOveray.data);
+            // ImGui::Image(reinterpret_cast<void *>(static_cast<intptr_t>(texture)), ImVec2(image.cols, image.rows));
         }
-        // ImGui::Image(reinterpret_cast<void *>(static_cast<intptr_t>(texture)), ImVec2(image.cols, image.rows));
 
         ImGui::Image(reinterpret_cast<void *>(static_cast<intptr_t>(texture2)), ImVec2(radImage.cols, radImage.rows));
     }
-
-    if (ImGui::Button("load"))
+    //set counts
+    if (ImGui::InputInt("effective count", &effectiveCount, 10, 100))
     {
-        char cwd[PATH_MAX];
-        if (getcwd(cwd, sizeof(cwd)) == nullptr)
+        if (effectiveCount < 0)
         {
-            perror("getdwd() error");
-            return false;
-        }
-        nfdresult_t result = NFD_PickFolder(".", &fileDir);
-        if (result == NFD_OKAY)
-        {
-            puts("Success!");
-            printf(fileDir);
-            sessionData = new HUREL::Compton::SessionData(fileDir);
-            if (sessionData->GetSizeListedListModeData() == 0)
-            {
-                delete sessionData;
-                sessionData = nullptr;
-            }
-        }
-        else if (result = NFD_CANCEL)
-        {
-            puts("Cancel");
+            effectiveCount = 0;
         }
         else
         {
-            printf("Error: %s\n", NFD_GetError());
-        }
+            isImageGet = false;
+        }        
     }
-
-    if (fileDir != nullptr)
-    {
-        ImGui::Text("%s", fileDir);
-    }
+    
     if (ImGui::Checkbox("Gray scale", &isGrayScale))
     {
         isImageGet = false;
@@ -252,11 +267,10 @@ bool HUREL::GUI::Reconstrcution2D(bool initial, Compton::SessionData *&sessionDa
     {
         isImageGet = false;
     }
-     if (ImGui::SliderFloat("opacity", &opacity, 0.0f, 1.0f))
+    if (ImGui::SliderFloat("opacity", &opacity, 0.0f, 1.0f))
     {
         isImageGet = false;
     }
-
 
     if (ImGui::SliderFloat("m2D", &m2D, 0.0f, 0.2f))
     {
@@ -274,4 +288,197 @@ bool HUREL::GUI::Reconstrcution2D(bool initial, Compton::SessionData *&sessionDa
     ImGui::End();
 
     return true;
+}
+
+void HUREL::GUI::InformationWindow(bool initial, Compton::SessionData *&sessionDataOrNull)
+{
+    static std::chrono::system_clock::time_point start;
+
+    if (initial)
+    {
+        start = std::chrono::system_clock::now();
+    }
+
+    ImGui::Begin("Information Window", nullptr, ImGuiWindowFlags_NoBringToFrontOnFocus);
+    ImGui::Text("%.1f FPS", ImGui::GetIO().Framerate);
+    std::chrono::duration<double> time = std::chrono::system_clock::now() - start;
+
+    // print time as hour:minute:second
+    int hour = time.count() / 3600;
+    int minute = (time.count() - hour * 3600) / 60;
+    int second = time.count() - hour * 3600 - minute * 60;
+    ImGui::Text("Program Running Time: %02d:%02d:%02d", hour, minute, second);
+
+    if (sessionDataOrNull != nullptr)
+    {
+
+        ImGui::Text("Session Data Path: %s", sessionDataOrNull->GetLoadFileDir().c_str());
+        ImGui::Text("Session List-Mode Data Size: %lu", sessionDataOrNull->GetSizeListedListModeData());
+        long long duration = sessionDataOrNull->GetEndTime().count() - sessionDataOrNull->GetStartTime().count();
+        // print time as hour:minute:second:milisecond
+        hour = duration / 3600 / 1000;
+        minute = (duration - hour * 3600 * 1000) / 60 / 1000;
+        second = (duration - hour * 3600 * 1000 - minute * 60 * 1000) / 1000;
+        int milisecond = (duration - hour * 3600 * 10000 - minute * 60 * 1000 - second * 1000);
+        ImGui::Text("Session Duration: %02d:%02d:%02d:%03d", hour, minute, second, milisecond);
+    }
+
+    // draw line graph with implot as x label time and y label count rate of session
+    if (ImPlot::BeginPlot("Count Rate"))
+    {
+        ImPlot::SetupAxes("Time (s)", "Count Rate (kcps)",
+                          ImPlotAxisFlags_::ImPlotAxisFlags_LockMin | ImPlotAxisFlags_::ImPlotAxisFlags_AutoFit,
+                          ImPlotAxisFlags_::ImPlotAxisFlags_LockMin | ImPlotAxisFlags_::ImPlotAxisFlags_AutoFit);
+        ImPlot::SetupAxesLimits(0, 100, 0, 1000, ImGuiCond_Once);
+        if (sessionDataOrNull != nullptr)
+        {
+            std::vector<double> countrate = sessionDataOrNull->GetCountRate();
+            std::vector<double> timeForCountrate;
+            timeForCountrate.reserve(countrate.size());
+            for (int i = 0; i < countrate.size(); i++)
+            {
+                timeForCountrate.push_back(i * 0.5);
+            }
+
+            ImPlot::PlotLine("Count Rate", timeForCountrate.data(), countrate.data(), countrate.size());
+        }
+
+        ImPlot::EndPlot();
+    }
+
+    ImGui::End();
+}
+
+void HUREL::GUI::ControlWindow(bool initial, Compton::SessionData *&sessionDataOrNull)
+{
+    static std::future<bool> startSessionFuture;
+    static bool isStartSession;
+    static bool isStartingSession;
+
+    if (initial)
+    {
+        isStartSession = false;
+        isStartingSession = false;
+    }
+    ImGui::SetNextWindowViewport(ImGui::GetMainViewport()->ID);
+    ImGui::Begin("Control Window", nullptr, ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+    ImGui::Checkbox("Realtime Run", &HUREL::GUI::mIsRealtimeRun);
+    if (HUREL::GUI::mIsRealtimeRun)
+    {
+        if (sessionDataOrNull != nullptr && sessionDataOrNull != &HUREL::Compton::LahgiControl::instance().GetLiveSessionData())
+        {
+            delete sessionDataOrNull;
+        }
+        sessionDataOrNull = &HUREL::Compton::LahgiControl::instance().GetLiveSessionData();
+
+        ImGui::Text("Control Window");
+        if (isStartSession)
+        {
+            ImGui::Text("Session is running");
+        }
+        else if (isStartingSession)
+        {
+            ImGui::Text("Starting session...");
+        }
+        else
+        {
+            ImGui::Text("Session is not running");
+        }
+
+        if (!isStartSession && isStartingSession)
+        {
+            // set button to disabled and grey
+            ImGui::PushStyleColor(ImGuiCol_Button, (ImVec4)ImColor::HSV(0.0f, 0.0f, 0.4f));
+            ImGui::Button("Start");
+            ImGui::PopStyleColor();
+        }
+        if (!isStartSession && !isStartingSession)
+        {
+            if (ImGui::Button("Start"))
+            {
+                // start session asynchronusly
+                startSessionFuture = std::async(std::launch::async,
+                                                []() -> bool
+                                                { return HUREL::Compton::LahgiControl::instance().StartSession(); });
+                isStartingSession = true;
+            }
+        }
+        if (isStartSession && !isStartingSession)
+        {
+            if (ImGui::Button("Stop"))
+            {
+                // stop session
+                HUREL::Compton::LahgiControl::instance().StopSession();
+                isStartSession = false;
+            }
+        }
+        if (isStartSession && isStartingSession)
+        {
+            ImGui::Button("Error");
+        }
+
+        if (startSessionFuture.valid())
+        {
+            if (startSessionFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+            {
+                if (startSessionFuture.get())
+                {
+                    isStartSession = true;
+                    isStartingSession = false;
+                }
+                else
+                {
+                    isStartingSession = false;
+                }
+            }
+        }
+    }
+    else
+    {
+        nfdchar_t *fileDir = nullptr;
+        if (ImGui::Button("load"))
+        {
+
+            char cwd[PATH_MAX];
+            if (getcwd(cwd, sizeof(cwd)) == nullptr)
+            {
+                perror("getdwd() error");
+                ImGui::End();
+                return;
+            }
+            nfdresult_t result = NFD_PickFolder(".", &fileDir);
+            if (result == NFD_OKAY)
+            {
+                if (sessionDataOrNull != nullptr && sessionDataOrNull != &HUREL::Compton::LahgiControl::instance().GetLiveSessionData())
+                {
+                    delete sessionDataOrNull;
+                }
+                sessionDataOrNull = new HUREL::Compton::SessionData(fileDir);
+                if (sessionDataOrNull->GetSizeListedListModeData() == 0)
+                {
+                    delete sessionDataOrNull;
+                    sessionDataOrNull = nullptr;
+                }
+                else
+                {
+                    isImageGet = false;
+                }
+            }
+            else if (result = NFD_CANCEL)
+            {
+                puts("Cancel");
+            }
+            else
+            {
+                printf("Error: %s\n", NFD_GetError());
+            }
+        }
+        if (sessionDataOrNull != nullptr)
+        {
+            ImGui::Text("Load folder: %s", sessionDataOrNull->GetLoadFileDir().c_str());
+        }
+    }
+
+    ImGui::End();
 }

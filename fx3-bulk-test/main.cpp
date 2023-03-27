@@ -93,6 +93,8 @@ static void *reader(void *arg1)
 			}
 		}
 	}
+
+	return nullptr;
 }
 
 static void *writer(void *arg2)

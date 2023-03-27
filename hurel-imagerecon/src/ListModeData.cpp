@@ -69,8 +69,6 @@ bool ListModeData::ReadListModeData(string data)
     this->Absorber.TransformedInteractionPoint = m * this->Absorber.RelativeInteractionPoint;
     return true;
 }
-
-
 string PrintEigenInOneLine(Eigen::Matrix4d m)
 {
     string data;

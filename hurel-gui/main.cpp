@@ -17,6 +17,7 @@
 #include "spdlog/sinks/stdout_color_sinks.h"
 
 #include "MyVisualizer.h"
+
 #include "LahgiControl.h"
 #include "SessionData.h"
 #include "RadiationImage.h"
@@ -29,10 +30,12 @@ static void glfw_error_callback(int error, const char *description)
 {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
+void testFunc(const unsigned short* buff);
 
 int main(int argv, char **argc)
 {
 
+    #pragma region Logger setting
     auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
     spdlog::logger logger("my_logger", {console_sink});
 
@@ -52,12 +55,18 @@ int main(int argv, char **argc)
         spdlog::info(std::string("CWD: ") + cwd);
     }
     // open3d::utility::SetVerbosityLevel(open3d::utility::VerbosityLevel::Debug);
+    
+    #pragma endregion
+    
+    #pragma region Lahgi setting
     HUREL::Compton::LahgiControl &lahgi = HUREL::Compton::LahgiControl::instance();
 
     Eigen::Matrix4d testMatrix = Eigen::Matrix4d::Zero();
     lahgi.SetType(HUREL::Compton::eMouduleType::QUAD);
 
     HUREL::Compton::SessionData *sessionData = nullptr;
+
+    #pragma endregion
     // Setup window
 
     glfwSetErrorCallback(glfw_error_callback);
@@ -199,6 +208,10 @@ int main(int argv, char **argc)
             return 1;
         }
 
+        HUREL::GUI::InformationWindow(initial, sessionData);
+
+        HUREL::GUI::ControlWindow(initial, sessionData);
+
         initial = false;
 #pragma region rendering
 
@@ -225,28 +238,7 @@ int main(int argv, char **argc)
 
         glfwSwapBuffers(window);
 
-        // if (!isSizeSet)
-        // {
-
-        //     int count;
-        //     GLFWmonitor** monitors = glfwGetMonitors(&count);
-        //     if (count > 0)
-        //     {
-        //         GLFWmonitor *primary = monitors[1];
-        //     if (primary != nullptr)
-        //     {
-        //         const GLFWvidmode *mode = glfwGetVideoMode(primary);
-        //         int screenWidth = mode->width;
-        //         int screenHeight = mode->height;
-        //         glfwSetWindowSize(window, screenWidth - screenHeight, screenHeight);
-        //         int monitorXpos, monitorYpos;
-        //         glfwGetMonitorPos(primary, &monitorXpos, &monitorYpos);
-        //         glfwSetWindowPos(window, monitorXpos, monitorYpos);
-        //         isSizeSet = true;
-        //     }
-        //     }
-
-        // }
+      
 
         glfwGetFramebufferSize(window, &display_w, &display_h);
         int windowXpos, windowYpos;
@@ -276,8 +268,11 @@ int main(int argv, char **argc)
 
     delete[] testX;
     delete[] testY;
-
-    delete sessionData;
+    if (sessionData != nullptr && sessionData != &HUREL::Compton::LahgiControl::instance().GetLiveSessionData())
+    {
+        delete sessionData;
+    }
+    
 
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
