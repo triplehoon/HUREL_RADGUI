@@ -1,0 +1,14 @@
+det_W 0.312
+effectiveCount 1000
+fwhm_at_0 0.500000
+hFov 60.0
+isGreyScale 1
+isLogScale 1
+m2D 0.068
+minPortion 0.9
+min_snr 5.000000
+opacity 0.5
+ref_fwhm 50.000000
+resImprov 15
+s2M 3.5
+wFov 90.0

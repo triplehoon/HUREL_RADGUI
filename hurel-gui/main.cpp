@@ -1,3 +1,5 @@
+#define TEST_MODE
+
 #include "nfd.h"
 // #include "glew.h"
 // #include "glad/glad.h"
@@ -24,7 +26,7 @@
 
 #include "ImWindows.h"
 
-#define FRAME_RATE (60)
+#define FRAME_RATE (30)
 
 static void glfw_error_callback(int error, const char *description)
 {
@@ -34,7 +36,6 @@ void testFunc(const unsigned short* buff);
 
 int main(int argv, char **argc)
 {
-
     #pragma region Logger setting
     auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
     spdlog::logger logger("my_logger", {console_sink});
@@ -54,10 +55,27 @@ int main(int argv, char **argc)
 
         spdlog::info(std::string("CWD: ") + cwd);
     }
+
+    //spdlog::set_level(spdlog::level::debug);
     // open3d::utility::SetVerbosityLevel(open3d::utility::VerbosityLevel::Debug);
     
     #pragma endregion
     
+    #pragma region test
+    #ifdef TEST_MODE
+    {
+        //test energyspectrum peak search
+        //#include "EnergySpectrum.h"
+        //HUREL::Compton::EnergySpectrum::EnergySpectrumTestCode();
+    }
+
+    HUREL::Compton::LahgiSerialControl::TestLahgiSerialControl();
+    #endif
+
+    #pragma endregion
+
+
+
     #pragma region Lahgi setting
     HUREL::Compton::LahgiControl &lahgi = HUREL::Compton::LahgiControl::instance();
 
@@ -156,7 +174,17 @@ int main(int argv, char **argc)
     bool isSizeSet = false;
 
     std::chrono::steady_clock::time_point lastTime = std::chrono::steady_clock::now();
+    auto viewControl = visualizer.GetViewControl();
+    viewControl.SetFront(Eigen::Vector3d(0, 0, -1));
+    viewControl.SetUp(Eigen::Vector3d(0, 1, 0));
+    viewControl.SetLookat(Eigen::Vector3d(0, 1, 0));
 
+    viewControl.SetZoom(0.3);
+    viewControl.ChangeFieldOfView(0.0);
+
+
+    std::future <void> loopUpatePointcloudFuture;
+    bool isFutureReady = true;
     // Main loop
     while (!glfwWindowShouldClose(window))
     {
@@ -170,9 +198,31 @@ int main(int argv, char **argc)
         }
         lastTime = currentTime;
 
-        // open3d update polls
-        visualizer.UpdateGeometry();
-        visualizer.PollEvents();
+        if (isFutureReady)
+        {
+            loopUpatePointcloudFuture = std::async(std::launch::async, [&pc_ptr, &visualizer]() {
+                //Get slamed point cloud
+                *pc_ptr = HUREL::Compton::RtabmapSlamControl::instance().GetSlamPointCloud();
+              
+            });
+            isFutureReady = false;
+
+        }
+        else
+        {
+            if (loopUpatePointcloudFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+            {
+                loopUpatePointcloudFuture.get();
+                // bird eye veiw of the camera
+                
+              
+                visualizer.UpdateGeometry();
+                visualizer.PollEvents();
+                isFutureReady = true;
+            }
+        }
+        //Get slamed point cloud
+        
 
         glfwMakeContextCurrent(window);
 
@@ -193,6 +243,9 @@ int main(int argv, char **argc)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        
+        //render in imgui window
+        ImGui::SetNextWindowViewport(ImGui::GetMainViewport()->ID);
         ImGui::Begin("Open3D window(always open)");
         ImGui::SetWindowSize(ImVec2(1000, 500), ImGuiCond_Once);
         HUREL::GUI::Reconstruction3D(visualizer);
@@ -212,7 +265,10 @@ int main(int argv, char **argc)
 
         HUREL::GUI::ControlWindow(initial, sessionData);
 
+        //ImPlot::ShowDemoWindow();
         initial = false;
+
+
 #pragma region rendering
 
         // Rendering imgui
@@ -234,6 +290,7 @@ int main(int argv, char **argc)
             ImGui::UpdatePlatformWindows();
             ImGui::RenderPlatformWindowsDefault();
             glfwMakeContextCurrent(backup_current_context);
+            
         }
 
         glfwSwapBuffers(window);
@@ -285,6 +342,7 @@ int main(int argv, char **argc)
     glfwTerminate();
 
     visualizer.DestroyVisualizerWindow();
+    
 
     return 0;
 }

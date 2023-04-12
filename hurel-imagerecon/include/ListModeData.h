@@ -8,23 +8,19 @@
 #include <Eigen/Core>
 #include <opencv2/opencv.hpp>
 
+#include "tbb/concurrent_unordered_map.h"
+
+#include "IsotopeData.h"
+
 #include "spdlog/spdlog.h"
 
+#define INTERACTION_GRID_SIZE 120
 namespace HUREL
 {
+	class IsotopeAnalysis;	
 	namespace Compton
 	{
 
-		struct sEnergyCheck
-		{
-			std::string sourceName = "none";
-			double minE;
-			double maxE;
-			bool operator==(const sEnergyCheck &other) const
-			{
-				return (minE == other.minE && maxE == other.maxE);
-			}
-		};
 		enum class eInterationType
 		{
 			NONE,
@@ -55,19 +51,23 @@ namespace HUREL
 			std::chrono::milliseconds InteractionTimeInMili = std::chrono::milliseconds(0);
 			Eigen::Matrix4d DetectorTransformation = Eigen::Matrix4d::Zero();
 
-			sEnergyCheck EnergyCheck;
+			sEnergyCheck EnergyCheck = sEnergyCheck{};
 
 			std::string WriteListModeData();
 			bool ReadListModeData(std::string data);
 		};
 
-	   struct sInteractionData
-        {
-            Eigen::MatrixXd RelativeInteractionPoint = Eigen::MatrixXd::Zero(60,60);
-            Eigen::Matrix4d DetectorTransformation;
-            sEnergyCheck EnergyCheck;
-            std::chrono::milliseconds StartInteractionTimeInMili;
-            std::chrono::milliseconds EndInteractionTimeInMili;
-        };
+		struct sInteractionData
+		{
+			Eigen::MatrixXd RelativeInteractionPoint = Eigen::MatrixXd::Zero(INTERACTION_GRID_SIZE, INTERACTION_GRID_SIZE);
+			Eigen::Matrix4d DetectorTransformation;
+			std::shared_ptr<std::vector<ListModeData>> ComptonListModeData = std::make_shared<std::vector<ListModeData>>(std::vector<ListModeData>());
+			//set default time as current time			
+			std::chrono::milliseconds StartInteractionTimeInMili = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+			std::chrono::milliseconds EndInteractionTimeInMili = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+			size_t interactionCount = 0;
+
+			
+		};
 	}
 }

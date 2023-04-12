@@ -18,4 +18,4 @@ add_library(cruxell STATIC
  ${headers}
  )
 
- TARGET_LINK_LIBRARIES(cruxell cyusb usb-1.0)
+ TARGET_LINK_LIBRARIES(cruxell cyusb ${LIBRARIES} usb-1.0)

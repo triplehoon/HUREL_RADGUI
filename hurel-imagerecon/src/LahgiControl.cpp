@@ -83,10 +83,16 @@ void HUREL::Compton::LahgiControl::ListModeDataListening()
 	size_t bufferSize = 1000000;
 	std::vector<std::array<unsigned short, 144>> tempVector;
 	tempVector.reserve(bufferSize);
+	std::future<void> getEchkFuture;
+	bool isEchkFutureReady = true;
+	std::chrono::milliseconds timeInMiliBefore = std::chrono::milliseconds(0);
+	std::chrono::milliseconds timeInMiliCurrent = std::chrono::milliseconds(0);
+
 
 	while (mIsListModeDataListeningThreadStart)
 	{
 		std::array<unsigned short, 144> out;
+		
 		while (mShortByteDatas.try_pop(out) && tempVector.size() < bufferSize)
 		{
 			tempVector.push_back(out);
@@ -96,22 +102,70 @@ void HUREL::Compton::LahgiControl::ListModeDataListening()
 			std::this_thread::sleep_for(std::chrono::nanoseconds(1));
 			continue;
 		}
-		mLiveSessionData.LockMutexAddingData();
+		spdlog::debug("C++HUREL::Compton::LahgiControl: ListModeDataListening: tempVector.size() = {}", tempVector.size());
+		spdlog::debug("C++HUREL::Compton::LahgiControl: ListModeDataListening: mShortByteDatas.size() = {}", mShortByteDatas.unsafe_size());
+
 		eChksMutex.lock();
-
-		std::chrono::milliseconds timeInMili = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+		mLiveSessionData.LockMutexAddingData();
+		// get current time
+		
+		
 		Eigen::Matrix4d deviceTransformation = t265toLACCPosTransform * RtabmapSlamControl::instance().GetOdomentry() * t265toLACCPosTransformInv * t265toLACCPosTranslate;
-
+		
+		timeInMiliCurrent = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+		spdlog::debug("C++HUREL::Compton::LahgiControl: ListModeDataListening: elasped time: {} ms", timeInMiliCurrent.count() - timeInMiliBefore.count());
+		
 		#pragma omp parallel for
 		for (int i = 0; i < tempVector.size(); ++i)
 		{
-			AddListModeDataWithTransformationLoop(tempVector[i], timeInMili, deviceTransformation);
+			if (timeInMiliBefore != std::chrono::milliseconds(0))
+			{
+				std::chrono::milliseconds timeInMili = timeInMiliBefore + (timeInMiliCurrent - timeInMiliBefore) * i / tempVector.size();
+				AddListModeDataWithTransformationLoop(tempVector[i], timeInMili, deviceTransformation);
+			}
 		}
-		mLiveSessionData.UnlockMutexAddingData();
+		timeInMiliBefore = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
 		mLiveSessionData.UpdateInteractionImage();
+		mLiveSessionData.UnlockMutexAddingData();		
 		eChksMutex.unlock();
+
+
 		// printf("done\n");
 		tempVector.clear();
+
+		if (getEchkFuture.valid() && getEchkFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+		{
+			getEchkFuture.get();
+			isEchkFutureReady = true;
+		}
+		if (isEchkFutureReady)
+		{
+			isEchkFutureReady = false;
+			getEchkFuture = std::async([this]
+									   {
+										cv::Mat tempImage = RtabmapSlamControl::instance().GetCurrentVideoFrame();
+										if (!tempImage.empty())
+										{
+											mLiveSessionData.mRgbImage = tempImage;
+										}
+										tempImage = RtabmapSlamControl::instance().GetCurrentDepthFrame();
+										if (!tempImage.empty())
+										{
+											mLiveSessionData.mDepthImage = tempImage;
+										}
+										open3d::geometry::PointCloud tempPointCloud = RtabmapSlamControl::instance().GetRTPointCloud();
+										if (!tempPointCloud.IsEmpty())
+										{
+											mLiveSessionData.mPointCloud = tempPointCloud;
+										}
+										tempPointCloud = RtabmapSlamControl::instance().GetSlamPointCloud();
+										if (!tempPointCloud.IsEmpty())
+										{
+											mLiveSessionData.mSlamPointCloud = tempPointCloud;
+										}
+								});
+		}
+
 		std::this_thread::sleep_for(std::chrono::nanoseconds(1));
 	}
 }
@@ -160,7 +214,7 @@ bool HUREL::Compton::LahgiControl::SetType(eMouduleType type)
 		{
 			double gain[10];
 
-			double offsetZ = -(0.245);
+			double offsetZ = -(0.265);
 			mScatterModules[i] = new Module(eMouduleType::QUAD, "./config/QUAD", scatterSerial + std::string("_Scint") + std::to_string(i), xOffset[i], yOffset[i], -0.055);
 			if (!mScatterModules[i]->IsModuleSet())
 			{
@@ -169,7 +223,6 @@ bool HUREL::Compton::LahgiControl::SetType(eMouduleType type)
 			mAbsorberModules[i] = new Module(eMouduleType::QUAD, "./config/QUAD", absorberSerial + std::string("_Scint") + std::to_string(i), xOffset[i], yOffset[i], -0.055 + offsetZ);
 			if (!mAbsorberModules[i]->IsModuleSet())
 			{
-
 				successFlag = successFlag & false;
 			}
 			
@@ -279,7 +332,7 @@ void HUREL::Compton::LahgiControl::AddListModeDataWithTransformationLoop(std::ar
 		{
 			for (int j = 0; j < 9; ++j)
 			{
-				scatterShorts[i - 4][j] = static_cast<double>(byteData[i * 9 + j]);
+				scatterShorts[i - 4][j] = static_cast<float>(byteData[i * 9 + j]);
 			}
 		}
 
@@ -288,7 +341,7 @@ void HUREL::Compton::LahgiControl::AddListModeDataWithTransformationLoop(std::ar
 		{
 			for (int j = 0; j < 9; ++j)
 			{
-				absorberShorts[i - 12][j] = static_cast<double>(byteData[i * 9 + j]);
+				absorberShorts[i - 12][j] = static_cast<float>(byteData[i * 9 + j]);
 			}
 		}
 
@@ -405,8 +458,15 @@ void HUREL::Compton::LahgiControl::AddListModeDataWithTransformationLoop(std::ar
 void HUREL::Compton::LahgiControl::AddShortByteData(const unsigned short* byteData)
 {
 	std::array<unsigned short, 144> pushData;
+	std::array<unsigned short, 144> pushData2;
+
 
 	memcpy(&pushData.front(), byteData, 144 * sizeof(unsigned short));
+	if (mShortByteDatas.unsafe_size() > 100000000)
+	{
+		spdlog::warn("ShortByteData is too big");
+		return;
+	}
 	mShortByteDatas.push(pushData);
 }
 SessionData &HUREL::Compton::LahgiControl::GetLiveSessionData()
@@ -420,6 +480,21 @@ bool HUREL::Compton::LahgiControl::StartSession()
 	{
 		spdlog::warn("Session is already running");
 		return true;
+	}
+
+	if (!LahgiSerialControl::GetInstance().CheckConnection())
+	{
+		spdlog::warn("Lahgi is not connected");
+		//return false;
+	}
+	if (!LahgiSerialControl::GetInstance().mIsFpgaOn)
+	{
+		spdlog::warn("FPGA is not on");
+		if (LahgiSerialControl::GetInstance().SetFpga(true) == false)
+		{
+			spdlog::error("Failed to turn on FPGA");
+			//return false;
+		}		
 	}
 
 	mLiveSessionData.Reset();
@@ -436,12 +511,69 @@ bool HUREL::Compton::LahgiControl::StartSession()
 		}
 	}
 
+	//try to start SLAM
+	RtabmapSlamControl::instance().StartSlamPipe();
+
     return mCruxellIO.Run();
 }
 
-void HUREL::Compton::LahgiControl::StopSession()
+void HUREL::Compton::LahgiControl::StopSession(std::string savePath)
 {
-	mCruxellIO.Stop();
+	if (mCruxellIO.IsConnect() && mCruxellIO.IsRunning())
+	{
+		mCruxellIO.Stop();
+	}
+	else
+	{
+		spdlog::warn("Session is not running");
+	}
+
+	//try to stop SLAM
+	RtabmapSlamControl::instance().StopSlamPipe();
+	
+	//make folder for saving at ~/Documents/Data
+	const char* home = getenv("HOME");
+	std::string folderPath = "/Documents/hurel/Data/";
+	folderPath = home + folderPath;
+	//make folders hurel
+	std::string command1 = std::string("mkdir ") + home + std::string("/Documents/hurel");
+	system(command1.c_str());
+	//make folders Data
+	std::string command2 = std::string("mkdir ") + home + std::string("/Documents/hurel/Data");
+	system(command2.c_str());
+
+
+	// timeString as "yyyy-mm-dd_hh-mm-ss"
+	std::time_t t = std::time(nullptr);
+	std::tm tm = *std::localtime(&t);
+	std::stringstream ss;
+	ss << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S");
+	std::string timeFormat = ss.str();
+	std::string folderName = "Session_" + timeFormat + "_" + savePath;
+
+	//make folder
+	std::string folderFullPath = folderPath + folderName;
+	std::string command3 = "mkdir " + folderFullPath;
+	system(command3.c_str());
+	
+
+	
+	mLiveSessionData.Save(folderFullPath);
+
+	mLiveSessionData.Reset();
+	
+}
+bool HUREL::Compton::LahgiControl::GetFPGAStatus()
+{
+    return true;
+}
+bool HUREL::Compton::LahgiControl::GetHvStatus()
+{
+    return true;
+}
+bool HUREL::Compton::LahgiControl::GetCameraStatus()
+{
+    return true;
 }
 /*
 void HUREL::Compton::LahgiControl::AddListModeDataWithTransformationVerification(const unsigned short byteData[])
@@ -709,13 +841,13 @@ EnergySpectrum &HUREL::Compton::LahgiControl::GetEnergySpectrum(int fpgaChannelN
 		}
 		break;
 	}
-	EnergySpectrum spect(5, 3000);
+	EnergySpectrum spect= EnergySpectrum();
 	return spect;
 }
 
 EnergySpectrum HUREL::Compton::LahgiControl::GetSumEnergySpectrum()
 {
-	EnergySpectrum spect(5, 3000);
+	EnergySpectrum spect= EnergySpectrum();
 	switch (mModuleType)
 	{
 	case eMouduleType::MONO:
@@ -745,7 +877,7 @@ EnergySpectrum HUREL::Compton::LahgiControl::GetSumEnergySpectrum()
 
 EnergySpectrum HUREL::Compton::LahgiControl::GetAbsorberSumEnergySpectrum()
 {
-	EnergySpectrum spect(5, 3000);
+	EnergySpectrum spect = EnergySpectrum();
 	switch (mModuleType)
 	{
 	case eMouduleType::MONO:
@@ -774,7 +906,7 @@ EnergySpectrum HUREL::Compton::LahgiControl::GetAbsorberSumEnergySpectrum()
 
 EnergySpectrum HUREL::Compton::LahgiControl::GetScatterSumEnergySpectrum()
 {
-	EnergySpectrum spect(5, 3000);
+	EnergySpectrum spect = EnergySpectrum();
 	switch (mModuleType)
 	{
 	case eMouduleType::MONO:

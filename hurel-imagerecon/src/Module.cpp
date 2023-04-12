@@ -10,7 +10,7 @@ HUREL::Compton::Module::Module() :
     mModuleOffsetY(0),
     mModuleOffsetZ(0),
     mIsModuleSet(false),
-    mEnergySpectrum(EnergySpectrum(5, 3000))
+    mEnergySpectrum(EnergySpectrum())
 {
 }
 
@@ -24,7 +24,7 @@ HUREL::Compton::Module::Module(eMouduleType moduleType,
 	mModuleOffsetY(moduleOffsetY),
     mModuleOffsetZ(moduleOffsetZ),
 	mIsModuleSet(false),
-    mEnergySpectrum(EnergySpectrum(binSize, maxEnergy))
+    mEnergySpectrum(EnergySpectrum())
 {
     mLutFileName = configDir + "/LUT" + "/" + moduleName + ".csv";
     mGainFileName = configDir + "/Gain" + "/" + moduleName + ".csv";

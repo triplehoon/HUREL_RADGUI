@@ -1,5 +1,14 @@
 #pragma once
 
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <numeric>
+#include <tbb/concurrent_vector.h>
+#include <tbb/concurrent_queue.h>
+#include <thread>
+#include <future>
+#include <array>
 #include <vector>
 
 // #include "RealsenseControl.h"
@@ -13,18 +22,9 @@
 #include "ReconPointCloud.h"
 #include "SessionData.h"
 #include "cruxellIO.h"
+#include "LahgiSerialControl.h"
 
-#include <iostream>
-#include <vector>
-#include <algorithm>
-#include <numeric>
-#include <tbb/concurrent_vector.h>
-#include <tbb/concurrent_queue.h>
-#include <thread>
-#include <future>
-#include <array>
-
-#define ACTIVE_AREA_LENGTH 0.
+#define GET_ECKS_TIME (10)
 
 namespace HUREL
 {
@@ -39,7 +39,7 @@ namespace HUREL
 			eMouduleType mModuleType;
 			// tbb::concurrent_vector <ListModeData> mListedListModeData;
 			// tbb::concurrent_vector <EnergyTimeData> mListedEnergyTimeData;
-			CRUXELL::CruxellIO mCruxellIO;
+			CRUXELL::CruxellIO& mCruxellIO;
 			LahgiControl();
 			inline static ListModeData MakeListModeData(const eInterationType &iType, Eigen::Vector4d &scatterPoint, Eigen::Vector4d &absorberPoint, double &scatterEnergy, double &absorberEnergy, Eigen::Matrix4d &transformation, std::chrono::milliseconds &timeInMili, sEnergyCheck& echk);
 			
@@ -77,10 +77,7 @@ namespace HUREL
 
 			~LahgiControl();
 
-			eMouduleType GetDetectorType();
-
-			size_t GetListedListModeDataSize();
-			
+			eMouduleType GetDetectorType();	
 
 			EnergySpectrum &GetEnergySpectrum(int fpgaChannelNumber);
 			EnergySpectrum GetSumEnergySpectrum();
@@ -99,9 +96,11 @@ namespace HUREL
 
 			bool StartSession();
 
-			void StopSession();
+			void StopSession(std::string savePathName = "");
 
-
+			bool GetFPGAStatus();
+			bool GetHvStatus();
+			bool GetCameraStatus();
 
 			ReconPointCloud GetReconRealtimePointCloudComptonUntransformed(open3d::geometry::PointCloud &pc, double time);
 			ReconPointCloud GetReconRealtimePointCloudCompton(open3d::geometry::PointCloud &pc, double time);

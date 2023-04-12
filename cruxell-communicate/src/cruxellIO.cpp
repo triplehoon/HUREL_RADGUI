@@ -13,6 +13,7 @@ HUREL::CRUXELL::CruxellIO::CruxellIO() : h1(NULL)
     spdlog::info("hello cruxell IO");
 
     Connect();
+    SetTestSettingValues();
 
     if (mIsConnect)
     {
@@ -167,10 +168,10 @@ bool HUREL::CRUXELL::CruxellIO::IsConnect()
 
 void HUREL::CRUXELL::CruxellIO::SetTestSettingValues()
 {
-    tb_0x11 = 1;
+    tb_0x11 = 2;
 
-    tb_0x12 = 30;
-    tb_0x13 = 3;
+    tb_0x12 = 35; // // T.W for Global Trig
+    tb_0x13 = 3;//
     tb_0x14 = 2;
     tb_0x15 = 85;
     tb_0x16 = 1;
@@ -181,12 +182,12 @@ void HUREL::CRUXELL::CruxellIO::SetTestSettingValues()
     tb_0x19_1 = 4000;
     tb_0x19_2 = 4000;
     tb_0x19_3 = 4000;
-    tb_0x19_4 = 4000;
-    tb_0x19_5 = 4000;
+    tb_0x19_4 = 10;
+    tb_0x19_5 = 10;
     tb_0x19_6 = 10;
     tb_0x19_7 = 10;
-    tb_0x19_8 = 10;
-    tb_0x19_9 = 10;
+    tb_0x19_8 = 4000;
+    tb_0x19_9 = 4000;
     tb_0x19_10 = 4000;
     tb_0x19_11 = 4000;
     tb_0x19_12 = 10;
@@ -215,25 +216,30 @@ bool HUREL::CRUXELL::CruxellIO::Run()
 {
     if (mIsRunning)
     {
-        spdlog::warn("Already the FPGA is running.");
+        spdlog::warn("CruxellIo: Already the FPGA is running.");
         return true;
     }
 
     if (!mIsConnect)
     {
-        spdlog::warn("FPGA is not connected");
+        spdlog::warn("CruxellIo: FPGA is not connected");
         return false;
     }
 
     usb_setting(1);
-
-    if (pthread_create(&tidParsingThread, NULL, parserLoop, this) < 0)
+    mIsRunning = true;
+    int result1 = pthread_create(&tidParsingThread, NULL, parserLoop, this) ;
+    int result2 = pthread_create(&tidParsingThread2, NULL, parserLoop2, this) ;
+    
+    if (result1 < 0 || result2 < 0)
     {
         spdlog::error("CRUXELLIO parserLoop thread creation fail!!!");
+        mIsRunning = false;
+
         usb_setting(3);
         return false;
     }
-    mIsRunning = true;
+\
     return true;
 }
 
@@ -249,8 +255,9 @@ bool HUREL::CRUXELL::CruxellIO::Stop()
     usb_setting(2);
     usb_setting(3);
     pthread_join(tidParsingThread, nullptr);
+    pthread_join(tidParsingThread2, nullptr);
 
-    cyusb_close();
+    //cyusb_close();
 
     spdlog::info("FPGA stop procedure is finished");
 
@@ -416,87 +423,64 @@ void *HUREL::CRUXELL::CruxellIO::parserLoop(void *arg1)
     CruxellIO &io = CruxellIO::instance();
 
     int transferResult;
-    constexpr size_t buffsize = 0x4000;
-    unsigned char buf[buffsize];
-    
+    constexpr size_t buffsize = 0x40000;
+    int transferStackCount = 20;
+    unsigned char** buf = new unsigned char *[transferStackCount];
+    for (int i = 0; i < transferStackCount; ++i)
+    {
+        buf[i] = new unsigned char[buffsize];
+        memset(buf[i], 0xff, buffsize);
+    }
     int transferred;
-    memset(buf, 0xff, buffsize);
     size_t packetCount = 0;
-
-    unsigned char dataBuffer[296];
-    memset(dataBuffer, 0, 296);
 
     unsigned short testBuff[144];
 
-    int flag = 0; // nothing 1 is find FE, 2 find seond FE
-    int countFlag = 0;
+  
+    int timeOutCount = 0;
+
+    //time measure
+    auto start = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::high_resolution_clock::now();
+
+    size_t transferStackIndex = 0;
 
     while (io.mIsRunning)
     {
+        start = std::chrono::high_resolution_clock::now();
 
-        transferResult = cyusb_bulk_transfer(io.h1, io.mInEnpointAddress, buf, buffsize, &transferred, 1000);
+        transferResult = cyusb_bulk_transfer(io.h1, io.mInEnpointAddress, buf[transferStackIndex], buffsize, &transferred, 1000);
 
         if (transferResult == 0)
         {
-
-            for (int i = 0; i < transferred; ++i)
+            while (io.mDataQueue.unsafe_size() == 20)
             {
-
-                if (flag == 2)
-                {
-                    dataBuffer[countFlag] = buf[i];
-                    ++countFlag;
-                    if (countFlag == 296 && dataBuffer[294] == 0xFE && dataBuffer[295] == 0xFE)
-                    {
-                        ++packetCount;
-
-                        // if (packetCount > 0 && packetCount % 1000000 == 0)
-                        // {
-                        //     printf("%d: ", packetCount);
-                        //     for (int shortCount = 9 * 4; shortCount < 9 * 5; ++shortCount)
-                        //     {
-                        //         unsigned short *shortPose = (unsigned short *)dataBuffer;
-                        //         printf("%000u ", shortPose[shortCount]);
-                        //     }
-                        //     printf("\n");
-                        // }
-
-                        io.mFuncAdder((unsigned short*)dataBuffer);
-                        countFlag = 0;
-                    }
-                    else if (countFlag == 296)
-                    {
-                        spdlog::warn("reset flag as 0");
-                        countFlag = 0;
-                        flag = 0;
-                    }
-                }
-                else
-                {
-                    if (buf[i] == 0xFE && flag == 0)
-                    {
-                        spdlog::info("fpga flag is 1");
-                        flag = 1;
-                    }
-                    else if (buf[i] == 0xFE && flag == 1)
-                    {
-                        spdlog::info("fpga flag is 2");
-                        flag = 2;
-                    }
-                    else
-                    {
-                        //spdlog::info("fpga flag is 0");
-                        flag = 0;
-                    }
-                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                spdlog::warn("wait until queue is empty");
             }
+            io.mDataQueue.push(std::make_pair(transferred, buf[transferStackIndex]));
+            transferStackIndex = (transferStackIndex + 1);
+            if (transferStackIndex >= transferStackCount)
+            {
+                transferStackIndex = 0;
+            }
+            timeOutCount =  0;
         }
         else
         {
 
             if (transferResult == LIBUSB_ERROR_TIMEOUT)
             {
-                // spdlog::warn("There are no data to process (time out)");
+                spdlog::warn("There are no data to process (time out)");
+                ++timeOutCount;
+                if (timeOutCount > 5)
+                {
+                    spdlog::warn("time out count is over 5, reset usb");
+                    CRUXELL::CruxellIO::instance().usb_setting(2);
+                    CRUXELL::CruxellIO::instance().usb_setting(3);
+                    CRUXELL::CruxellIO::instance().usb_setting(1);
+                    timeOutCount = 0;
+                }
             }
             else if (transferResult == LIBUSB_ERROR_NO_DEVICE)
             {
@@ -514,7 +498,83 @@ void *HUREL::CRUXELL::CruxellIO::parserLoop(void *arg1)
     // empty io buffer    
     while (transferResult == 0)
     {
-        transferResult = cyusb_bulk_transfer(io.h1, io.mInEnpointAddress, buf, buffsize, &transferred, 1000);
+        transferResult = cyusb_bulk_transfer(io.h1, io.mInEnpointAddress, buf[transferStackIndex], buffsize, &transferred, 1000);
+    }
+
+    delete[] buf;
+
+    return nullptr;
+}
+
+void *HUREL::CRUXELL::CruxellIO::parserLoop2(void *arg1)
+{
+    CruxellIO &io = CruxellIO::instance();
+    //start time
+    auto start = std::chrono::high_resolution_clock::now();
+    int flag = 0; // nothing 1 is find FE, 2 find seond FE
+    int countFlag = 0;
+
+
+    unsigned char dataBuffer[296];
+    memset(dataBuffer, 0, 296);
+    while (io.mIsRunning)
+    {
+        std::pair<int, unsigned char *> data;
+        while(!io.mDataQueue.try_pop(data))
+        {
+            //sleep thread
+            if (!io.mIsRunning)
+            {
+                return nullptr;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        start = std::chrono::high_resolution_clock::now();
+        int transferred = data.first;
+        unsigned char *buf = data.second;
+        for (int i = 0; i < transferred; ++i)
+        {
+            if (flag == 2)
+            {
+                dataBuffer[countFlag] = buf[i];
+                ++countFlag;
+                if (countFlag == 296 && dataBuffer[294] == 0xFE && dataBuffer[295] == 0xFE)
+                {
+                    ++packetCount;
+
+                    io.mFuncAdder((unsigned short *)dataBuffer);
+                    countFlag = 0;
+                }
+                else if (countFlag == 296)
+                {
+                    spdlog::warn("reset flag as 0");
+                    countFlag = 0;
+                    flag = 0;
+                }
+            }
+            else
+            {
+                if (buf[i] == 0xFE && flag == 0)
+                {
+                    spdlog::info("fpga flag is 1");
+                    flag = 1;
+                }
+                else if (buf[i] == 0xFE && flag == 1)
+                {
+                    spdlog::info("fpga flag is 2");
+                    flag = 2;
+                }
+                else
+                {
+                    // spdlog::info("fpga flag is 0");
+                    flag = 0;
+                }
+            }
+        }
+        //spdlog::warn("data compute transferCount: {0}", transferred);
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = (end - start);
+        //spdlog::warn("data compute elapsed time: {0} ms", elapsed.count() * 1000);
     }
 
     return nullptr;

@@ -3,8 +3,10 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <memory.h>
-#include <tbb/concurrent_queue.h>
+#include <future>
+#include <queue>
 
+#include <tbb/concurrent_queue.h>
 #include "cyusb.h"
 
 #include "spdlog/spdlog.h"
@@ -33,12 +35,16 @@ namespace HUREL
             
 
             pthread_t tidParsingThread;
+            pthread_t tidParsingThread2;
 
             void tryparse_send(unsigned char* dataInput, int data_size, int data, int add, int sub_add );
             void usb_setting(int flag);
 
+            tbb::concurrent_queue<std::pair<int, unsigned char*>> mDataQueue = tbb::concurrent_queue<std::pair<int, unsigned char*>>();
+
             static void tranferCallback(libusb_transfer* transfer);
             static void* parserLoop(void* arg1);
+            static void* parserLoop2(void* arg1);
 
         public:
             static CruxellIO& instance();

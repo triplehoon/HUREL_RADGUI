@@ -46,7 +46,7 @@ namespace HUREL {
 
 			std::string mModuleName = "";
 			eMouduleType mModuleType = HUREL::Compton::eMouduleType::MONO;
-			EnergySpectrum mEnergySpectrum = EnergySpectrum(5, 3000);
+			EnergySpectrum mEnergySpectrum = EnergySpectrum();
 			bool mIsModuleSet = false;
 
 			bool LoadGain(std::string fileName, eMouduleType moduleType, double* outEGain);

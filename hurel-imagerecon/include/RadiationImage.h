@@ -97,7 +97,9 @@ namespace HUREL {
 			RadiationImage() {};
 			RadiationImage(std::vector<ListModeData>& data);			
 			RadiationImage(std::vector<ListModeData>& data, double s2M, double det_W, double resImprov, double m2D, double hFov, double wFov);
-			RadiationImage(sInteractionData& data, std::vector<ListModeData>& lmData, double s2M, double resImprov, double m2D, double hFov, double wFov);
+			RadiationImage(sInteractionData& data, double s2M, double resImprov, double m2D, double hFov, double wFov);
+			RadiationImage(std::vector<sInteractionData>& data, double s2M, double resImprov, double m2D, double hFov, double wFov);
+
 
 			double OverlayValue(Eigen::Vector3d point, eRadiationImagingMode mode);
 

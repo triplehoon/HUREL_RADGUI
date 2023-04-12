@@ -17,7 +17,8 @@ string ListModeData::WriteListModeData()
 	data += std::to_string(this->Absorber.RelativeInteractionPoint[1]); data += ",";
 	data += std::to_string(this->Absorber.RelativeInteractionPoint[2]); data += ",";
 	data += std::to_string(this->Absorber.InteractionEnergy); data += ",";
-    data += PrintEigenInOneLine(this->DetectorTransformation);
+    data += PrintEigenInOneLine(this->DetectorTransformation); data += ",";
+    data += this->EnergyCheck.sourceName;
 
     return data;
 }
@@ -30,7 +31,7 @@ bool ListModeData::ReadListModeData(string data)
     {
         words.push_back(word);
     }
-    if (words.size() != 25)
+    if (words.size() <= 24 || words.size() > 26)
     {
         return false;
     }
@@ -43,7 +44,7 @@ bool ListModeData::ReadListModeData(string data)
     this->Absorber.RelativeInteractionPoint[0] = stod(words[5]);
     if (!isnan(this->Absorber.RelativeInteractionPoint[0]) &&  !(isnan(this->Scatter.RelativeInteractionPoint[0])))
     {
-        this->Type = eInterationType::COMPTON;
+        this->Type = eInterationType::COMPTON;        
     }
     else if (!isnan(this->Scatter.RelativeInteractionPoint[0]))
     {
@@ -65,6 +66,21 @@ bool ListModeData::ReadListModeData(string data)
             m(i, j) = stod(words[k++]);
         }
     }
+    if (words.size() == 26)
+    {
+        switch (this->Type)
+        {
+        case eInterationType::COMPTON:
+            this->EnergyCheck = IsotopeAnalysis::GetEnergyCheck(words[25], this->Scatter.InteractionEnergy + this->Absorber.InteractionEnergy);
+            break;   
+        case eInterationType::CODED:
+            this->EnergyCheck = IsotopeAnalysis::GetEnergyCheck(words[25], this->Scatter.InteractionEnergy);
+            break;     
+        default:
+            break;
+        }            
+    }        
+    
     this->Scatter.TransformedInteractionPoint = m * this->Scatter.RelativeInteractionPoint;
     this->Absorber.TransformedInteractionPoint = m * this->Absorber.RelativeInteractionPoint;
     return true;

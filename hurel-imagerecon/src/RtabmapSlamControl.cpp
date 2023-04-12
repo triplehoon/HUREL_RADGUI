@@ -48,6 +48,8 @@ void ShowCV_32FAsJet(cv::Mat img, int size)
 
 HUREL::Compton::RtabmapSlamControl::RtabmapSlamControl()
 {
+	Initiate();
+	StartVideoStream();
 
 }
 
@@ -55,6 +57,15 @@ bool HUREL::Compton::RtabmapSlamControl::Initiate()
 {
 	std::string msg;
 	std::string* outMessage = &msg;
+
+	//set default parameters
+	{
+		UDEBUG("Logging settings changed...");
+		ULogger::setType(ULogger::kTypeConsole);
+		ULogger::setLevel(ULogger::kDebug);
+		// ULogger::setLevel((ULogger::Level)_preferencesDialog->getGeneralLoggerLevel());
+	}
+
 	try {
 		rs2::context ctx = rs2::context();
 		rs2::device_list devs =  ctx.query_devices();
@@ -118,7 +129,7 @@ bool HUREL::Compton::RtabmapSlamControl::Initiate()
 		mCamera->setDepthResolution(848, 480);
 
 		const rtabmap::Transform test(0.000f, 0.13f, 0.0f, 0.0f, 0.0f, 0.0f);
-		mCamera->setDualMode(true, test);
+		//mCamera->setDualMode(false, test);
 
 		//mCamera->setOdomProvided(true, false, true);
 		//mCamera->setImagesRectified(true);
@@ -127,20 +138,23 @@ bool HUREL::Compton::RtabmapSlamControl::Initiate()
 	{
 		*outMessage += "RtabmapSlamControl: CameraRealSense2 error " + exp ;
 	}
-	if (!mCamera->init(".", ""))
+	if (!mCamera->init())
 	{
 		*outMessage += "RtabmapSlamControl: Initiate failed";
 		spdlog::error("C++::HUREL::Compton::RtabmapSlamControl: {0}", *outMessage);
-
+		delete mCamera;
+		mCamera = nullptr;		
 		mIsInitiate = false;
+		ULogger::setLevel(ULogger::kError);
 		return false;
 	}
 	else
 	{
 		*outMessage += "RtabmapSlamControl: Initiate success";
-		spdlog::error("C++::HUREL::Compton::RtabmapSlamControl: {0}", *outMessage);
+		spdlog::info("C++::HUREL::Compton::RtabmapSlamControl: {0}", *outMessage);
 		StartVideoStream();
 		mIsInitiate = true;
+		ULogger::setLevel(ULogger::kError);
 		return true;
 	}	
 }
@@ -360,6 +374,8 @@ cv::Mat HUREL::Compton::RtabmapSlamControl::GetCurrentDepthFrame()
 		{
 
 			img = data.depthRaw();
+			//raw depth to distance
+			img.convertTo(img, CV_32F, 0.001);
 		}
 	}
 	return img;
@@ -507,6 +523,7 @@ static std::mutex slamPipeMutex;
 
 void HUREL::Compton::RtabmapSlamControl::SlamPipe()
 {
+
 	mOdo = rtabmap::Odometry::create();
 	rtabmap::OdometryThread odomThread(mOdo);
 	// Create RTAB-Map to process OdometryEvent
@@ -642,13 +659,6 @@ open3d::geometry::PointCloud HUREL::Compton::RtabmapSlamControl::GetSlamPointClo
 	open3d::geometry::PointCloud returnPC = *tmpOpen3dPc.VoxelDownSample(0.05);
 	open3d::io::WritePointCloudOption option;
 	
-	open3d::io::WritePointCloudToPCD(fileName + ".ply", returnPC, option);
-
-
-	cv::imwrite(fileName + "_depth.png", RtabmapSlamControl::instance().GetCurrentDepthFrame());
-	cv::imwrite(fileName + "_rgb.png", RtabmapSlamControl::instance().GetCurrentVideoFrame());
-
-
 
 	return returnPC;
 }
