@@ -57,7 +57,6 @@ HUREL::Compton::SessionData::SessionData(std::string fileDir) : mIsLoaded(true),
         return;
     }
     mListedListModeData.clear();
-
     std::string buffer;
     char line[2048];
     while (loadFile.good())
