@@ -7,7 +7,7 @@ open3d 0.1.6
 spdlog 1.4.0
 fmt 6.0.0 (important) -fPIC option needed
 
-# Intall enviroment
+# Install enviroment
 Ubuntu 18 as in English
 
 # Package installation    
