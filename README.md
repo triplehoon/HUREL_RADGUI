@@ -94,10 +94,12 @@ tar -xvf v0.17.0.tar.gz
 cd Open3D-0.17.0/     
 mkdir build       
 cd build        
-ccmake ..       
-c,c,g,        
-make -j 40 && sudo make install       
-
+ccmake ..         
+c,       
+use_system_fmt as ON     
+use_system_qhull as ON   
+use_system_flann as ON    
+make -j 40 && sudo make install      
 
 ## opencv 4.2: 영상화 툴     
 https://webnautes.tistory.com/1186     
