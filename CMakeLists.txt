@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.2.2)
 project(RADGUI_PROJECT)
 
-find_package(catkin REQUIRED
-        )
+find_package(catkin REQUIRED)
+
+
 message(STATUS "rtabmap include libs: ${RTABMap_LIBRARIES}")
 
 #set compiler as 
@@ -62,7 +63,7 @@ include_directories(${TBB_INCLUDE_DIRS})
 # catkin_package(CATKIN_DEPENDS rtabmap)
 # include_directories("/opt/ros/noetic/include/rtabmap-0.20")
 
-find_package(PCL 1.10 REQUIRED)
+find_package(PCL REQUIRED)
 include_directories(${PCL_INCLUDE_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
