@@ -92,6 +92,9 @@ make -j 40 && sudo make install
 wget https://github.com/isl-org/Open3D/archive/refs/tags/v0.17.0.tar.gz       
 tar -xvf v0.17.0.tar.gz      
 cd Open3D-0.17.0/     
+
+CMakeList 에서 GLIBCXX_USE_CXX11_ABI ON 으로 다 변경 (혹은 one api 설치 제대로)
+
 mkdir build       
 cd build        
 ccmake ..         
