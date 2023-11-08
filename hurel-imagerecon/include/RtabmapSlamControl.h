@@ -15,6 +15,7 @@
 #include "rtabmap/core/CameraThread.h"
 
 #include <iostream>
+#include <algorithm>
 
 #include <rtabmap/core/Odometry.h>
 #include "rtabmap/core/Rtabmap.h"
@@ -26,22 +27,41 @@
 #include "rtabmap/core/OdometryThread.h"
 #include "rtabmap/core/Graph.h"
 #include "rtabmap/utilite/UEventsManager.h"
+#include "rtabmap/core/Parameters.h"
+#include "rtabmap/core/CameraRGBD.h"
+#include "rtabmap/core/Signature.h"
+#include "rtabmap/core/OccupancyGrid.h"
+
 #include <open3d/geometry/PointCloud.h>
 #include <open3d/pipelines/registration/Registration.h>
 #include <open3d/io/PointCloudIO.h>
+#include <open3d/geometry/LineSet.h>
+
 #include <librealsense2/rs.hpp>
 
 
 #include <pcl/io/pcd_io.h>
 #include <pcl/io/ply_io.h>
 #include <pcl/filters/filter.h>
+#include <pcl/filters/statistical_outlier_removal.h>
+#include <pcl/point_types.h>
+
 
 #include <spdlog/spdlog.h>
 
+#include <opencv2/highgui.hpp>
+#include <opencv2/opencv.hpp>
 
-#define T265_TO_LAHGI_OFFSET_X (-0.0)
-#define T265_TO_LAHGI_OFFSET_Y (0.29)
-#define T265_TO_LAHGI_OFFSET_Z (-0.05)
+
+//#define T265_TO_LAHGI_OFFSET_X (-0.0)
+//#define T265_TO_LAHGI_OFFSET_Y (-0.35)
+//#define T265_TO_LAHGI_OFFSET_Z (-0.40)
+//고방복탐
+#define T265_TO_LAHGI_OFFSET_X (0.295)
+#define T265_TO_LAHGI_OFFSET_Y (-0.035)
+#define T265_TO_LAHGI_OFFSET_Z (-0.100)
+
+
 #define T265_To_Mask_OFFSET_X (T265_TO_LAHGI_OFFSET_X)
 #define T265_To_Mask_OFFSET_Y (T265_TO_LAHGI_OFFSET_Y)
 #define T265_To_Mask_OFFSET_Z (0.00)
@@ -68,7 +88,11 @@ namespace HUREL
 
 			pcl::PointCloud<pcl::PointXYZRGB> mRealtimePointCloud = pcl::PointCloud<pcl::PointXYZRGB>();
 			pcl::PointCloud<pcl::PointXYZRGB> mSlamedPointCloud = pcl::PointCloud<pcl::PointXYZRGB>();
-			//Eigen::Matrix4d mCurrentOdometry = Eigen::Matrix4d::Identity();
+			pcl::PointCloud<pcl::PointXYZRGB> mCurrentPointCloud = pcl::PointCloud<pcl::PointXYZRGB>();
+
+			open3d::geometry::PointCloud mOccupancyPCLGrid;
+			cv::Mat mOccupancyGrid;
+
 			void SlamPipe();
 
 			RtabmapSlamControl();
@@ -81,13 +105,43 @@ namespace HUREL
 			void LockDepthFrame();
 
 			void UnlockDepthFrame();
+
+			float	fxValue;
+			float	fyValue;
+			float	cxValue;
+			float	cyValue;
+
+			double mgridWith;
+			double mgridHeight;
+			double mminX;
+			double mminZ;
+
+
 		public:
 			bool mIsInitiate = false;
 			bool mIsVideoStreamOn = false;
 			bool mIsSlamPipeOn = false;
 			bool mOdoInit = false;
 
+			int rowSize;
+			int colSize;
+
+			struct sIsotopePCL
+			{
+				std::string IsotopeName;
+				double maxLocx;
+				double maxLocy;
+				double maxLocz;
+				double maxValue;
+			};
+			std::vector<sIsotopePCL> mIsotopePCLList = std::vector<sIsotopePCL>();
+
 			bool Initiate();
+
+			void PushBackIsotopeData(std::string IsotopeName, double maxLocx, double maxLocy, double maxLocz, double maxValue);
+
+			void GetIntrinsic(float* outfx, float* outfy, float* outcx, float* outcy);
+			void GetIntrinsic();
 
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 			Eigen::Matrix4d GetOdomentry();
@@ -96,10 +150,16 @@ namespace HUREL
 
 			cv::Mat GetCurrentVideoFrame();
 			cv::Mat GetCurrentDepthFrame();
-			cv::Mat GetCurrentPointsFrame(double res);
+
+			void CalOccupancySize(float res, double* outWidth, double* outHeight, double* outMinX, double* outMinZ);
+			open3d::geometry::PointCloud createOccupancyPCL(float res);
+	
+
+			open3d::geometry::PointCloud PclToOpen3d(pcl::PointCloud<pcl::PointXYZRGB>::Ptr tmp);
 
 			open3d::geometry::PointCloud GetRTPointCloud();
 			open3d::geometry::PointCloud GetRTPointCloudTransposed();
+			open3d::geometry::PointCloud RTPointCloudTransposed(open3d::geometry::PointCloud& initialPC, Eigen::Matrix4d transMatrix);
 
 			void StartVideoStream();
 			void StopVideoStream();
@@ -110,13 +170,20 @@ namespace HUREL
 			void ResetSlam();
 
 			open3d::geometry::PointCloud GetSlamPointCloud();
+			open3d::geometry::PointCloud GetPosePointCloud();
+			open3d::geometry::LineSet GetPosePointCloudLineSet();
+			open3d::geometry::PointCloud GetCurrentPointCloud();
+			open3d::geometry::PointCloud GetFilteredSlamPointCloud();
+			open3d::geometry::PointCloud GetOccupancyPointCloud();
 
-			std::vector<double> getMatrix3DOneLineFromPoseData();
-
+			pcl::PointCloud<pcl::PointXYZRGB>::Ptr generatePointCloud(cv::Mat &depth, cv::Mat &rgb, float fx, float fy, float cx, float cy);
+			pcl::PointCloud<pcl::PointXYZRGB>::Ptr generatePointCloud(cv::Mat &depth, cv::Mat &rgb);
+			
 			bool LoadPlyFile(std::string filePath);
 
 			open3d::geometry::PointCloud GetLoadedPointCloud();
 		public:
+
 			static RtabmapSlamControl& instance();
 			~RtabmapSlamControl();
 		};

@@ -54,6 +54,7 @@ namespace HUREL
 			sEnergyCheck EnergyCheck = sEnergyCheck{};
 
 			std::string WriteListModeData();
+			std::string WriteListModeTransData();
 			bool ReadListModeData(std::string data);
 		};
 

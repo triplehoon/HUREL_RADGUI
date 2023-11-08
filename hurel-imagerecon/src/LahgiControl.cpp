@@ -50,6 +50,7 @@ HUREL::Compton::LahgiControl::LahgiControl() : mAbsorberModules(NULL),
 											   mModuleType(HUREL::Compton::eMouduleType::MONO),
 											   mCruxellIO(CRUXELL::CruxellIO::instance())
 {
+	//lahgicontrol 생성자, cruxellIO 생성자도 instance로 생성됨
 	Eigen::Matrix4d test;
 	test = Matrix4d::Ones();
 	Eigen::Vector3d test2 = Eigen::Vector3d(1, 1, 1);
@@ -111,7 +112,8 @@ void HUREL::Compton::LahgiControl::ListModeDataListening()
 		
 		
 		Eigen::Matrix4d deviceTransformation = t265toLACCPosTransform * RtabmapSlamControl::instance().GetOdomentry() * t265toLACCPosTransformInv * t265toLACCPosTranslate;
-		
+		//Eigen::Matrix4d deviceTransformation = t265toLACCPosTransform * RtabmapSlamControl::instance().GetOdomentry() * t265toLACCPosTransformInv;
+
 		timeInMiliCurrent = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
 		spdlog::debug("C++HUREL::Compton::LahgiControl: ListModeDataListening: elasped time: {} ms", timeInMiliCurrent.count() - timeInMiliBefore.count());
 		
@@ -153,16 +155,22 @@ void HUREL::Compton::LahgiControl::ListModeDataListening()
 										{
 											mLiveSessionData.mDepthImage = tempImage;
 										}
-										open3d::geometry::PointCloud tempPointCloud = RtabmapSlamControl::instance().GetRTPointCloud();
-										if (!tempPointCloud.IsEmpty())
-										{
-											mLiveSessionData.mPointCloud = tempPointCloud;
-										}
+										open3d::geometry::PointCloud tempPointCloud;
 										tempPointCloud = RtabmapSlamControl::instance().GetSlamPointCloud();
 										if (!tempPointCloud.IsEmpty())
 										{
 											mLiveSessionData.mSlamPointCloud = tempPointCloud;
 										}
+										pcl::PointCloud<pcl::PointXYZRGB>::Ptr gencloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+										*gencloud = *RtabmapSlamControl::instance().generatePointCloud(mLiveSessionData.mDepthImage, mLiveSessionData.mRgbImage);
+										tempPointCloud = RtabmapSlamControl::instance().PclToOpen3d(gencloud);
+										if (!tempPointCloud.IsEmpty())
+										{
+											mLiveSessionData.mPointCloud = tempPointCloud;
+										}
+										
+										Eigen::Matrix4d tempTransMatrix = t265toLACCPosTransform * RtabmapSlamControl::instance().GetOdomentry() * t265toLACCPosTransformInv * t265toLACCPosTranslate;
+										mLiveSessionData.mTransMatrix = tempTransMatrix;	
 								});
 		}
 
@@ -172,7 +180,7 @@ void HUREL::Compton::LahgiControl::ListModeDataListening()
 
 HUREL::Compton::LahgiControl &HUREL::Compton::LahgiControl::instance()
 {
-	static LahgiControl &instance = *(new LahgiControl());
+	static LahgiControl &instance = *(new LahgiControl()); //lahgi control 생성자로 이동
 	return instance;
 }
 
@@ -209,18 +217,24 @@ bool HUREL::Compton::LahgiControl::SetType(eMouduleType type)
 		double xOffset[4]{-offset, -offset, +offset, +offset};
 		double yOffset[4]{+offset, -offset, -offset, +offset};
 		std::string scatterSerial = "50777";
-		std::string absorberSerial = "50784";
+		std::string absorberSerial = "51516";
+		//std::string scatterSerial = "50776";
+		//std::string absorberSerial = "50785";
+		
 		for (int i = 0; i < 4; ++i)
 		{
 			double gain[10];
 
-			double offsetZ = -(0.265);
-			mScatterModules[i] = new Module(eMouduleType::QUAD, "./config/QUAD", scatterSerial + std::string("_Scint") + std::to_string(i), xOffset[i], yOffset[i], -0.055);
+			//double offsetZ = -(0.265);
+			double offsetZ = -(0.255);
+			//mScatterModules[i] = new Module(eMouduleType::QUAD, "./config/QUAD", scatterSerial + std::string("_Scint") + std::to_string(i), xOffset[i], yOffset[i], -0.055);
+			mScatterModules[i] = new Module(eMouduleType::QUAD, "./config/QUAD", scatterSerial + std::string("_Scint") + std::to_string(i), xOffset[i], yOffset[i], -0.0);
 			if (!mScatterModules[i]->IsModuleSet())
 			{
 				successFlag = successFlag & false;
 			}
-			mAbsorberModules[i] = new Module(eMouduleType::QUAD, "./config/QUAD", absorberSerial + std::string("_Scint") + std::to_string(i), xOffset[i], yOffset[i], -0.055 + offsetZ);
+			//mAbsorberModules[i] = new Module(eMouduleType::QUAD, "./config/QUAD", absorberSerial + std::string("_Scint") + std::to_string(i), xOffset[i], yOffset[i], -0.055 + offsetZ);
+			mAbsorberModules[i] = new Module(eMouduleType::QUAD, "./config/QUAD", absorberSerial + std::string("_Scint") + std::to_string(i), xOffset[i], yOffset[i], -0.0 + offsetZ);
 			if (!mAbsorberModules[i]->IsModuleSet())
 			{
 				successFlag = successFlag & false;
@@ -236,30 +250,6 @@ bool HUREL::Compton::LahgiControl::SetType(eMouduleType type)
 	}
 	case HUREL::Compton::eMouduleType::QUAD_DUAL:
 	{
-		// double offset = 0.083;
-
-		// double xOffset[8]{ -offset, +offset, -offset, +offset };
-		// double yOffset[8]{ -offset, -offset, +offset, +offset };
-		// mScatterModules = new Module * [8];
-		// mAbsorberModules = new Module * [8];
-		// for (int i = 0; i < 8; ++i)
-		//{
-		//	string slutFileDirectory = string("config\\QUAD\\Scatter\\LUT\\Lut_scintillator_") + to_string(i) + string(".csv");
-		//	string sgainFileDirectory = string("config\\QUAD\\Scatter\\Gain\\Energy_gain_scintillator_") + to_string(i) + string(".csv");
-
-		//	string alutFileDirectory = string("config\\QUAD\\Absorber\\LUT\\Lut_scintillator_") + to_string(i) + string(".csv");
-		//	string againFileDirectory = string("config\\QUAD\\Absorber\\Gain\\Energy_gain_scintillator_") + to_string(i) + string(".csv");
-
-		//	double gain[9];
-		//	Module::LoadGain(sgainFileDirectory, type, gain);
-
-		//	double offsetZ = -(0.251 + (31.5 - 21.5) / 1000);
-		//	mScatterModules[i] = new Module(eMouduleType::QUAD, gain, gain, slutFileDirectory, xOffset[i], yOffset[i]);
-
-		//	Module::LoadGain(againFileDirectory, type, gain);
-		//	mAbsorberModules[i] = new Module(eMouduleType::QUAD, gain, gain, alutFileDirectory, xOffset[i], yOffset[i]);
-
-		//}
 		break;
 	}
 	case HUREL::Compton::eMouduleType::TEST:
@@ -293,13 +283,6 @@ HUREL::Compton::LahgiControl::~LahgiControl()
 		}
 		break;
 	case HUREL::Compton::eMouduleType::QUAD_DUAL:
-		/*mScatterModules = new Module * [8];
-		mAbsorberModules = new Module * [8];
-		for (int i = 0; i < 8; ++i)
-		{
-			delete mScatterModules[i];
-			delete mAbsorberModules[i];
-		}*/
 		break;
 	case HUREL::Compton::eMouduleType::TEST:
 		delete mScatterModules[0];
@@ -353,6 +336,7 @@ void HUREL::Compton::LahgiControl::AddListModeDataWithTransformationLoop(std::ar
 		int scatterInteractModuleNum[4];
 		int absorberInteractModuleNum[4];
 
+		//For loop for each scintillator
 		for (int i = 0; i < 4; ++i)
 		{
 			scattersEnergy[i] = mScatterModules[i]->GetEcal(scatterShorts[i]);
@@ -402,7 +386,6 @@ void HUREL::Compton::LahgiControl::AddListModeDataWithTransformationLoop(std::ar
 			}
 			else if (absorberInteractionCount == 0)
 			{
-
 				// Coded Apature
 				for (int i = 0; i < eChk.size(); ++i)
 				{
@@ -481,7 +464,7 @@ bool HUREL::Compton::LahgiControl::StartSession()
 		spdlog::warn("Session is already running");
 		return true;
 	}
-
+/*
 	if (!LahgiSerialControl::GetInstance().CheckConnection())
 	{
 		spdlog::warn("Lahgi is not connected");
@@ -496,10 +479,11 @@ bool HUREL::Compton::LahgiControl::StartSession()
 			//return false;
 		}		
 	}
-
+*/
 	mLiveSessionData.Reset();
 
 	ResetEnergySpectrum();
+
 	if (!mCruxellIO.IsConnect())
 	{	
 		spdlog::warn("Trying to reconnect to CruxellIO");
@@ -514,6 +498,9 @@ bool HUREL::Compton::LahgiControl::StartSession()
 	//try to start SLAM
 	RtabmapSlamControl::instance().StartSlamPipe();
 
+	const char* home = getenv("HOME");
+	std::string command3 = std::string("mkdir ") + home + std::string("/Documents/hurel/Data/Session_1");
+	system(command3.c_str());
     return mCruxellIO.Run();
 }
 
@@ -528,8 +515,6 @@ void HUREL::Compton::LahgiControl::StopSession(std::string savePath)
 		spdlog::warn("Session is not running");
 	}
 
-	//try to stop SLAM
-	RtabmapSlamControl::instance().StopSlamPipe();
 	
 	//make folder for saving at ~/Documents/Data
 	const char* home = getenv("HOME");
@@ -557,6 +542,14 @@ void HUREL::Compton::LahgiControl::StopSession(std::string savePath)
 	system(command3.c_str());
 	
 
+	open3d::geometry::PointCloud  pc = RtabmapSlamControl::instance().GetSlamPointCloud();
+	open3d::io::WritePointCloudOption option;
+
+	open3d::io::WritePointCloudToPLY(folderFullPath + "/_slam.ply", pc, option);
+
+	//try to stop SLAM
+	RtabmapSlamControl::instance().StopSlamPipe();
+	
 	
 	mLiveSessionData.Save(folderFullPath);
 
@@ -1061,216 +1054,3 @@ void HUREL::Compton::LahgiControl::ResetEnergySpectrum(int fpgaChannelNumber)
 	}
 	return;
 }
-/*
-ReconPointCloud HUREL::Compton::LahgiControl::GetReconRealtimePointCloudComptonUntransformed(open3d::geometry::PointCloud &outPC, double seconds)
-{
-	HUREL::Compton::ReconPointCloud reconPC = HUREL::Compton::ReconPointCloud(outPC);
-
-	std::chrono::milliseconds t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
-
-	std::vector<ListModeData> tempLMData = GetListedListModeData();
-
-	// std::cout << "Start Recon (LM): " << tempLMData.size() << std::endl;
-	// std::cout << "Start Recon (PC): " << reconPC.points_.size() << std::endl;
-	int reconStartIndex = 0;
-	for (int i = 0; i < tempLMData.size(); ++i)
-	{
-
-		if ((t - tempLMData[i].InteractionTimeInMili).count() < seconds * 1000)
-		{
-			reconStartIndex = i;
-			break;
-		}
-	}
-#pragma omp parallel for
-	for (int i = reconStartIndex; i < tempLMData.size(); ++i)
-	{
-		reconPC.CalculateReconPoint(tempLMData[i], ReconPointCloud::SimpleComptonBackprojectionUntransformed);
-	}
-
-	std::cout << "End Recon: " << tempLMData.size() << std::endl;
-
-	return reconPC;
-}
-
-ReconPointCloud HUREL::Compton::LahgiControl::GetReconRealtimePointCloudCompton(open3d::geometry::PointCloud &outPC, double seconds)
-{
-	HUREL::Compton::ReconPointCloud reconPC = HUREL::Compton::ReconPointCloud(outPC);
-
-	std::chrono::milliseconds t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
-
-	std::vector<ListModeData> tempLMData = GetListedListModeData();
-
-	// std::cout << "Start Recon (LM): " << tempLMData.size() << std::endl;
-	// std::cout << "Start Recon (PC): " << reconPC.points_.size() << std::endl;
-	int reconStartIndex = 0;
-	for (int i = 0; i < tempLMData.size(); ++i)
-	{
-
-		if (seconds == 0)
-		{
-			reconStartIndex = 0;
-			break;
-		}
-		if (t.count() - tempLMData[i].InteractionTimeInMili.count() < static_cast<int64_t>(seconds))
-		{
-			reconStartIndex = i;
-			break;
-		}
-	}
-
-	std::vector<ListModeData> reconLm;
-	reconLm.reserve(tempLMData.size());
-	// assert(0, "temp energy search");
-	for (const auto lm : tempLMData)
-	{
-		if (lm.Absorber.InteractionEnergy + lm.Scatter.InteractionEnergy > 620 && lm.Scatter.InteractionEnergy + lm.Absorber.InteractionEnergy < 700)
-		{
-			reconLm.push_back(lm);
-		}
-	}
-
-#pragma omp parallel for
-	for (int i = 0; i < reconLm.size(); ++i)
-	{
-		reconPC.CalculateReconPoint(reconLm[i], ReconPointCloud::SimpleComptonBackprojection);
-	}
-	// HUREL::Logger::Instance().InvokeLog("C++HUREL::Compton::LahgiControl", "GetReconRealtimePointCloudCompton End Recon: " + reconLm.size(), eLoggerType::INFO);
-
-	return reconPC;
-}
-
-ReconPointCloud HUREL::Compton::LahgiControl::GetReconOverlayPointCloudCoded(open3d::geometry::PointCloud &outPC, double seconds)
-{
-	HUREL::Compton::ReconPointCloud reconPC = HUREL::Compton::ReconPointCloud(outPC);
-
-	std::chrono::milliseconds t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
-
-	std::vector<RadiationImage> tempLMData;
-
-	// std::cout << "Start Recon (LM): " << tempLMData.size() << std::endl;
-	// std::cout << "Start Recon (PC): " << reconPC.points_.size() << std::endl;
-	int reconStartIndex = 0;
-	for (int i = 0; i < tempLMData.size(); ++i)
-	{
-
-		if (t.count() - tempLMData[i].mListedListModeData[0].InteractionTimeInMili.count() < static_cast<int64_t>(seconds))
-		{
-			reconStartIndex = i;
-			break;
-		}
-	}
-
-	for (int i = reconStartIndex; i < tempLMData.size(); ++i)
-	{
-		reconPC.CalculateReconPointCoded(tempLMData[i]);
-	}
-	std::cout << "End GetReconOverlayPointCloudCoded: " << tempLMData.size() << std::endl;
-
-	return reconPC;
-}
-
-ReconPointCloud HUREL::Compton::LahgiControl::GetReconOverlayPointCloudCompton(open3d::geometry::PointCloud &outPC, double seconds)
-{
-	HUREL::Compton::ReconPointCloud reconPC = HUREL::Compton::ReconPointCloud(outPC);
-
-	std::chrono::milliseconds t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
-	mListModeImageMutex.lock();
-
-	std::vector<RadiationImage> tempLMData;
-	mListModeImageMutex.unlock();
-
-	int reconStartIndex = 0;
-	for (int i = 0; i < tempLMData.size(); ++i)
-	{
-
-		if (t.count() - tempLMData[i].mListedListModeData[0].InteractionTimeInMili.count() < static_cast<int64_t>(seconds))
-		{
-			reconStartIndex = i;
-			break;
-		}
-	}
-
-	for (int i = reconStartIndex; i < tempLMData.size(); ++i)
-	{
-		reconPC.CalculateReconPointCompton(tempLMData[i]);
-	}
-	// std::cout << "End GetReconOverlayPointCloudCompton: " << tempLMData.size() << std::endl;
-
-	return reconPC;
-}
-
-ReconPointCloud HUREL::Compton::LahgiControl::GetReconOverlayPointCloudHybrid(open3d::geometry::PointCloud &outPC, double seconds)
-{
-	HUREL::Compton::ReconPointCloud reconPC = HUREL::Compton::ReconPointCloud(outPC);
-
-	std::vector<ListModeData> lmData = GetListedListModeData();
-	RadiationImage radimg = RadiationImage(lmData);
-	reconPC.CalculateReconPointHybrid(radimg);
-
-	return reconPC;
-}
-
-inline int findIndex(double value, double min, double pixelSize)
-{
-	if (value - min <= 0)
-	{
-		return -1;
-	}
-	return static_cast<int>(floor((value + 0.00001 - min) / pixelSize));
-}
-
-cv::Mat HUREL::Compton::LahgiControl::GetResponseImage(int imgSize, int pixelCount, double timeInSeconds, bool isScatter)
-{
-	std::chrono::milliseconds t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
-
-	std::vector<ListModeData> tempLMData = GetListedListModeData(timeInSeconds * 1000);
-
-	constexpr double Det_W = 0.400;
-	Mat responseImg(pixelCount, pixelCount, CV_32S, Scalar(0));
-	int32_t *responseImgPtr = static_cast<int32_t *>(static_cast<void *>(responseImg.data));
-
-	for (ListModeData lm : tempLMData)
-	{
-
-		double interactionPoseX = -999999;
-		double interactionPoseY = -999999;
-
-		switch (lm.Type)
-		{
-		case eInterationType::COMPTON:
-			if (isScatter)
-			{
-				interactionPoseX = lm.Scatter.RelativeInteractionPoint[0];
-				interactionPoseY = lm.Scatter.RelativeInteractionPoint[1];
-			}
-			else
-			{
-				interactionPoseX = lm.Absorber.RelativeInteractionPoint[0];
-				interactionPoseY = lm.Absorber.RelativeInteractionPoint[1];
-			}
-
-			break;
-		case eInterationType::CODED:
-			if (isScatter)
-			{
-				interactionPoseX = lm.Scatter.RelativeInteractionPoint[0];
-				interactionPoseY = lm.Scatter.RelativeInteractionPoint[1];
-			}
-			break;
-		default:
-			continue;
-			break;
-		}
-
-		int iX = findIndex(interactionPoseX, -Det_W / 2, Det_W / pixelCount);
-		int iY = findIndex(interactionPoseY, -Det_W / 2, Det_W / pixelCount);
-		if (iX >= 0 && iY >= 0 && iX < pixelCount && iY < pixelCount)
-		{
-			++responseImgPtr[pixelCount * iY + iX];
-		}
-	}
-
-	return HUREL::Compton::RadiationImage::GetCV_32SAsJet(responseImg, imgSize);
-}
-*/

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <tuple>
 #include <open3d/geometry/PointCloud.h>
 #include <open3d/utility/Helper.h>
 #include <unordered_map>
@@ -8,6 +9,7 @@
 #include "ListModeData.h"
 #include "RadiationImage.h"
 #include "spdlog/spdlog.h"
+#include "RtabmapSlamControl.h"
 
 namespace HUREL
 {
@@ -36,6 +38,9 @@ namespace HUREL
 			std::vector<double> reconValues_;
 			double maxReoconValue = 0;
 
+			void imspaceLim(open3d::geometry::PointCloud& totalPC, int azFOV, int polFOV, open3d::geometry::PointCloud* outFOVPC, Eigen::MatrixXd* outFOVchk);
+			void imspaceLim(open3d::geometry::PointCloud& totalPC, int azFOV, int polFOV, Eigen::Matrix4d transMatrix, open3d::geometry::PointCloud* outtransFOVPC, open3d::geometry::PointCloud* outtransPC, Eigen::MatrixXd* outFOVchk);
+
 			void CalculateReconPoint(ListModeData lmData, double(*calcFunc)(ListModeData&, Eigen::Vector3d&));
 			void CalculateReconPointCoded(RadiationImage& lmImage);
 			void CalculateReconPointCompton(RadiationImage& lmImage);
@@ -44,13 +49,15 @@ namespace HUREL
 
 
 			static double SimpleComptonBackprojection(ListModeData& lmData, Eigen::Vector3d& imgPoint);
-
+			static double SimpleComptonBackprojection(ListModeData& lmData, Eigen::Vector3d& imgPoint, double FOVchk);
+			static double SimpleComptonBackprojectionTransformed(ListModeData& lmData, Eigen::Vector3d& imgPoint, double FOVchk);
+			
 			static double SimpleComptonBackprojectionUntransformed(ListModeData& lmData, Eigen::Vector3d& imgPoint);
-			static double SimpleComptonBackprojectionUntransformed(ListModeData& lmData, Eigen::Vector3d& imgPoint, double* outComptonScatterAngle, double* outSigmacomptonScatteringAngle, Eigen::Vector3d* outScatterToAbsorberVector);
 
 			static RGBA_t ColorScaleJet(double v, double vmin, double vmax);
 
 			std::shared_ptr<ReconPointCloud> VoxelDownSample(double voxel_size) const;
+			std::tuple<double, double, double> cartesianToSpherical(double x, double y, double z);
 		};
 
 

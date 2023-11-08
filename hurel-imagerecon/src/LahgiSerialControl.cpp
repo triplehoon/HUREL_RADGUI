@@ -7,29 +7,49 @@ HUREL::Compton::LahgiSerialControl::LahgiSerialControl()
 
 
     GetSerialPortList();
-
+/*
     if (mSerialPortList.size() == 0)
     {
         spdlog::error("LahgiSerialControl::LahgiSerialControl - No serial port found");
-
         spdlog::error("Bind bluetooth machine with laptop. Example below");
         spdlog::error("sudo rfcomm bind 0 98:D3:71:FD:C6:77 1");
         spdlog::error("sudo rfcomm bind 0 (--MAC address--) 1");
+        
+
+        SendCommand("sudo rfcomm bind trial\n");
+        SendCommand("sudo rfcomm unbind 0 98:D3:71:FD:C6:77 1");
+
+        std::string unbindcommand = std::string("sudo rfcomm unbind 0 98:D3:71:FD:C6:77 1");
+	    system(unbindcommand.c_str());
+
+        SendCommand("sudo rfcomm bind 0 98:D3:71:FD:C6:77 1");
+        std::string bindcommand = std::string("sudo rfcomm bind 0 98:D3:71:FD:C6:77 1");
+	    system(bindcommand.c_str());
+        
+
         return;
     } 
+ 
     CheckConnection();
 
-    CheckValues(true);
+    CheckValues(true); //check and store check values
+    //if the value is not stored well the following code doesn't work
     if (mIsFpgaOn == false)
     {
         SetFpga(true);
     }
-    if (mHvVoltage < 500)
+    if (mHvVoltage > 500)
     {
         SetHv(false);
+        spdlog::info("Lahgi high voltage on");
         SetHv(true);
     }
-
+    else
+    {
+        SetHv(true);
+    }
+*/
+    
 }
 
 HUREL::Compton::LahgiSerialControl::~LahgiSerialControl()
@@ -131,7 +151,7 @@ void HUREL::Compton::LahgiSerialControl::ReadCommand(std::string &command)
 
     spdlog::info("LahgiSerialControl::ReadCommand");
     // set timeout
-    double timeOut = 10;
+    double timeOut = 20;
 
     // current time
     std::chrono::time_point<std::chrono::system_clock> start, end;
@@ -231,10 +251,13 @@ bool HUREL::Compton::LahgiSerialControl::CheckConnection()
                 SendCommand("\n");
                 //dump command response
                 //ReadCommand(response);
-                SendCommand("\n");
-                SendCommand("\n");
-                SendCommand("\n");
                 SendCommand("check\n");
+                SendCommand("\n");
+                SendCommand("\n");
+                SendCommand("\n");
+                SendCommand("\n");
+                SendCommand("\n");
+                //need time to get response
                 ReadCommand(response);
                 if (response.length() > 0)
                 {
@@ -267,6 +290,14 @@ void HUREL::Compton::LahgiSerialControl::CheckValues(bool isSendCheckCommand)
             SendCommand("check\n");
         }
         std::string response;
+        SendCommand("\n");
+        SendCommand("\n");
+        SendCommand("\n");
+        SendCommand("\n");
+        SendCommand("\n");
+        SendCommand("\n");
+        sleep(5);
+        //need time to get response
         ReadCommand(response);
 
         if (response.length() > 0)
@@ -434,11 +465,11 @@ bool HUREL::Compton::LahgiSerialControl::SetSwtich(int switchNumber, bool isSwit
 
 void HUREL::Compton::LahgiSerialControl::TestLahgiSerialControl()
 {
-    // get instance
+    // get instance 생성자로 이동
     LahgiSerialControl &control = LahgiSerialControl::GetInstance();
 
     // check connection
-    //control.GetSerialPortList();
+    control.GetSerialPortList();
 
     auto deviceList = control.mSerialPortList;
     for (int i = 0; i < deviceList.size(); i++)
@@ -450,13 +481,13 @@ void HUREL::Compton::LahgiSerialControl::TestLahgiSerialControl()
         spdlog::debug("LahgiSerialControl::TestLahgiSerialControl - No device found");
         return;
     }
-    control.CheckConnection();
+//    control.CheckConnection();
 
-    //control.CheckValues(true);
+    control.CheckValues(true);
 
     //control.SetFpga(true);
 
-    sleep(5);
+    //sleep(5);
     
     //control.SetFpga(true);
 

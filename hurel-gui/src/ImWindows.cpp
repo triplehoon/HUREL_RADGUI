@@ -313,7 +313,7 @@ void HUREL::GUI::EnergySpectrumWindow(bool initial, Compton::SessionData *&sessi
                         auto tempEchk = isotope.GetEnergyCheck();
                         energyCheckData.insert(energyCheckData.end(), tempEchk.begin(), tempEchk.end());
                     }
-
+                    // Energy Echks 설정 부분.
                     HUREL::Compton::LahgiControl::instance().SetEchk(energyCheckData);
                 }
 
@@ -454,8 +454,10 @@ void HUREL::GUI::EnergySpectrumWindow(bool initial, Compton::SessionData *&sessi
             else
             {
                 std::vector<double> isotopeEnergy = mIsotopeDataList.at(i).GetEnergyPeaks();
+
                 for (int j = 0; j < isotopeEnergy.size(); ++j)
                 {
+                    //std::cout << "checked isotope energy: " << isotopeEnergy.at << std::endl;
                     int xIndexEnergy = std::upper_bound(testX.begin(), testX.end(), isotopeEnergy.at(j)) - testX.begin();
                     bool isSelected = false;
                     int drawPosX = isotopeEnergy.at(j) + 100;
@@ -759,19 +761,20 @@ void HUREL::GUI::EnergySpectrumWindow(bool initial, Compton::SessionData *&sessi
         }
         if (k40Peak > 0)
         {
+            //ImGui::Button("재교정");
             if (ImGui::Button("재교정"))
             {
                 auto ecalValues = HUREL::Compton::LahgiControl::instance().GetEcalValue(channelNumber);
 
-                double diffPortion = k40Peak / 1460.82;
+                double diffPortion =  1460.82 / k40Peak;
                 // ax^2 + bx + c = energy
                 double a = std::get<0>(ecalValues);
                 double b = std::get<1>(ecalValues);
                 double c = std::get<2>(ecalValues);
 
-                double newA = a / diffPortion / diffPortion;
-                double newB = b / diffPortion;
-                double newC = c / diffPortion;
+                double newA = a * diffPortion * diffPortion;
+                double newB = b * diffPortion;
+                double newC = c;
                 
                 HUREL::Compton::LahgiControl::instance().SetEcalValue(channelNumber, std::make_tuple(newA, newB, newC));
                 k40Peak = -1;
@@ -968,7 +971,7 @@ bool HUREL::GUI::Reconstrcution2D(bool initial, Compton::SessionData *&sessionDa
             recon2dFutureRealtime = std::async(std::launch::async, [&]() -> cv::Mat
                                                {
                 image = HUREL::Compton::RtabmapSlamControl::instance().GetCurrentVideoFrame();
-               
+                
                 
                 if (!image.empty())
                 {
@@ -1110,15 +1113,12 @@ bool HUREL::GUI::Reconstrcution2D(bool initial, Compton::SessionData *&sessionDa
         if (sessionData != nullptr && recon2dFutreReady)
         {
             recon2dFutreReady = false;
-
+            //spdlog::info("Se;ected Isotope Name : {}", mSelectedIsotopeData.GetIsotopeName());
             recon2dFuture = std::async(std::launch::async, [&]() -> cv::Mat
-
-                                       {
+            {
                 auto interData = sessionData->GetInteractionData(mSelectedIsotopeData, effectiveCount);
-                //spdlog::info("get listed list mode data done");
-                //radData = HUREL::Compton::RadiationImage(lmData, s2M, det_W, resImprov, m2D, hFov, wFov);
-                   trueCount = 0;
-                //radData = HUREL::Compton::RadiationImage(lmData, s2M, det_W, resImprov, m2D, hFov, wFov);
+                
+                trueCount = 0;
                 if (interData.size() == 0)
                 {
                     //spdlog::info("no interaction data");
@@ -1128,9 +1128,23 @@ bool HUREL::GUI::Reconstrcution2D(bool initial, Compton::SessionData *&sessionDa
                 {
                     trueCount += interData[i].interactionCount;
                 }
-                auto radData = HUREL::Compton::RadiationImage(interData, s2M, resImprov, m2D, hFov, wFov);
-                 
-               ///spdlog::info("image recon done");
+                
+                open3d::geometry::PointCloud pcd = sessionData->GetPointCloud();
+                auto transmatrix = sessionData->GetTransMatrix();
+                //std::cout << "Get pointcloud!!! " << pcd.points_.size()<< std::endl; 
+                if (pcd.points_.size() == 0)
+                {
+                    spdlog::info("no point cloud data");
+                    std::cout << "Empty Get pointcloud!!!" << std::endl; 
+                }
+				
+                double maxValue = 0; double maxLocx = 0; double maxLocy = 0; double maxLocz = 0;
+                //auto radData = HUREL::Compton::RadiationImage(interData, s2M, resImprov, pcd, &maxValue, &maxLocx, &maxLocy, &maxLocz); //pcl에 compton 정지 영상화 구현 완료, 최대값저장은 미완
+                //auto radData = HUREL::Compton::RadiationImage(interData, s2M, resImprov, pcd, transmatrix, &maxValue, &maxLocx, &maxLocy, &maxLocz); //pcl에 compton 움직이면서 영상화 완료, 최대값저장은 미완
+                //auto radData = HUREL::Compton::RadiationImage(interData, s2M, resImprov, 0.073, 60, 90);  //직교 좌표계에 영상화 hybrid까지 구현 완료
+                auto radData = HUREL::Compton::RadiationImage(interData, s2M, resImprov, hFov, wFov);  //직교 좌표계에 영상화 hybrid까지 구현 완료
+
+                //spdlog::info("image recon done");
                 cv::Point2i tempPoint;
                 if (reconType == 0)
                 {
@@ -1143,7 +1157,7 @@ bool HUREL::GUI::Reconstrcution2D(bool initial, Compton::SessionData *&sessionDa
                 }
                 else if (reconType == 1)
                 {
-                     double maxVal = 0;
+                    double maxVal = 0;
                     cv::minMaxLoc(radData.mComptonImage, NULL, &maxVal, NULL, &tempPoint);
 
                     radImageMaxLoc.x = (double)tempPoint.x/ (double)radData.mComptonImage.cols;
@@ -1155,8 +1169,6 @@ bool HUREL::GUI::Reconstrcution2D(bool initial, Compton::SessionData *&sessionDa
                 {
                     double maxVal = 0;
                     cv::minMaxLoc(radData.mCodedImage, NULL, &maxVal, NULL, &tempPoint);
-
-
                     radImageMaxLoc.x = (double)tempPoint.x/ (double)radData.mComptonImage.cols;
                     radImageMaxLoc.y = (double)tempPoint.y/ (double)radData.mComptonImage.rows;
                     return HUREL::Compton::RadiationImage::GetCV_32SAsJet(radData.mCodedImage, image.rows, image.cols, minPortion, opacity);
@@ -1165,7 +1177,11 @@ bool HUREL::GUI::Reconstrcution2D(bool initial, Compton::SessionData *&sessionDa
                 else
                 {
                     return cv::Mat();
-                } }
+                } 
+
+                //핵종 이름, maximum location이랑, value를 push back
+                //HUREL::Compton::RtabmapSlamControl::instance().PushBackIsotopeData(mSelectedIsotopeData.GetIsotopeName(), maxLocx, maxLocy, maxLocz, maxValue);
+            }
 
             );
         }
@@ -1208,8 +1224,10 @@ bool HUREL::GUI::Reconstrcution2D(bool initial, Compton::SessionData *&sessionDa
                 {
                     trueCount += interData[i].interactionCount;
                 }
-                radData = HUREL::Compton::RadiationImage(interData, s2M, resImprov, m2D, hFov, wFov);
-                spdlog::info("image recon done");
+                //radData = HUREL::Compton::RadiationImage(interData, s2M, resImprov, m2D, hFov, wFov);
+                radData = HUREL::Compton::RadiationImage(interData, s2M, resImprov, 0.073, 60, 90);
+                //radData = HUREL::Compton::RadiationImage(interData, s2M, resImprov, pcd, transmatrix, &maxValue, &maxLocx, &maxLocy, &maxLocz); //pcl에 compton 움직이면서 영상화 완료, 최대값저장은 미완
+                //spdlog::info("image recon done");
                 
                 image = sessionData->mRgbImage;
                 
@@ -1242,7 +1260,9 @@ bool HUREL::GUI::Reconstrcution2D(bool initial, Compton::SessionData *&sessionDa
                     }
                     overlayImage(image, radImage, radImageOveray);
                 }
-                return radImageOveray; });
+                return radImageOveray; 
+                }
+                );
         }
 
         if (recon2dFuture.valid())
@@ -1632,6 +1652,7 @@ void HUREL::GUI::SettingWindow(bool initial, Compton::SessionData *&sessionDataO
 void HUREL::GUI::MakeBeep(double timeItervalInSecond)
 {
     static double setBeepTime = 0.0;
+
     static std::chrono::time_point<std::chrono::system_clock> beforeBeepTime = std::chrono::system_clock::now();
     
     std::chrono::time_point<std::chrono::system_clock> now = std::chrono::system_clock::now();

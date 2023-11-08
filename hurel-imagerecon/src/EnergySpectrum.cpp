@@ -294,6 +294,10 @@ void HUREL::Compton::EnergySpectrum::EnergySpectrumTestCode()
 double HUREL::Compton::EnergySpectrum::GetDoseRate(EnergySpectrum &spect, double timeInSecond)
 {
     InitDoseRate();
+    if (!mIsDoseRateInitComplete)
+    {
+         return 0.0 / 0.0; 
+    }
     if (spect.mHistogramEnergy.size() != 301)
     {
         return 0.0;
@@ -303,7 +307,8 @@ double HUREL::Compton::EnergySpectrum::GetDoseRate(EnergySpectrum &spect, double
     {
         doseRate += spect.GetHistogramEnergy()[i].Count * H10Coeff[i];
     }
-    return doseRate * DOSE_RATE_COEFFICIENT / timeInSecond;
+//    return doseRate * DOSE_RATE_COEFFICIENT / timeInSecond;
+    return doseRate / timeInSecond;
 }
 
 void HUREL::Compton::EnergySpectrum::InitDoseRate()
@@ -312,7 +317,6 @@ void HUREL::Compton::EnergySpectrum::InitDoseRate()
     {
         return;
     }
-    mIsDoseRateInitComplete = true;
 
     // load doseRate.csv
     std::ifstream doseRateFile("doseRate.csv");
@@ -364,5 +368,6 @@ void HUREL::Compton::EnergySpectrum::InitDoseRate()
             KermaCoeff.push_back(std::stod(record[i]));
         }
     }
+        mIsDoseRateInitComplete = true;
 
 }

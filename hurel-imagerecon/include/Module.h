@@ -12,7 +12,6 @@
 #include <sstream>
 #include <limits>
 #include <Eigen/Core>
-#include <mkl/mkl.h>
 
 #include "spdlog/spdlog.h"
 #include "EnergySpectrum.h"

@@ -4,6 +4,10 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
 #include <opencv2/core/eigen.hpp>
+
+
+#include <opencv2/highgui.hpp>
+
 #include <open3d/geometry/Octree.h>
 
 #include <omp.h>
@@ -11,6 +15,7 @@
 #include "ListModeData.h"
 #include "ReconPointCloud.h"
 #include "spdlog/spdlog.h"
+
 
 
 namespace HUREL {
@@ -91,19 +96,18 @@ namespace HUREL {
 			Mat mComptonImage;
 			Mat mCodedImage;
 			Mat mHybridImage;
+
 		    static void ShowCV_32SAsJet(cv::Mat img, int size);
 			static cv::Mat GetCV_32SAsJet(cv::Mat img, int size);
 			static cv::Mat GetCV_32SAsJet(cv::Mat img, int sizeh, int sizew, double minValuePortion, double opacity);
 			RadiationImage() {};
 			RadiationImage(std::vector<ListModeData>& data);			
-			RadiationImage(std::vector<ListModeData>& data, double s2M, double det_W, double resImprov, double m2D, double hFov, double wFov);
-			RadiationImage(sInteractionData& data, double s2M, double resImprov, double m2D, double hFov, double wFov);
-			RadiationImage(std::vector<sInteractionData>& data, double s2M, double resImprov, double m2D, double hFov, double wFov);
-
-
+			RadiationImage(std::vector<sInteractionData>& dataVector, double s2M, double resImprov, double m2D, double hFov, double wFov);
+			RadiationImage(std::vector<sInteractionData>& dataVector, double s2M, double resImprov, double hFov, double wFov);
+			RadiationImage(std::vector<sInteractionData> &dataVector, double s2M, double resImprov, open3d::geometry::PointCloud& reconPointCloud, double* outmaxValue, double* outmaxLocx, double* outmaxLocy, double* outmaxLocz);
+			RadiationImage(std::vector<sInteractionData> &dataVector, double s2M, double resImprov, open3d::geometry::PointCloud& reconPointCloud, Eigen::Matrix4d transMatrix, double* outmaxValue, double* outmaxLocx, double* outmaxLocy, double* outmaxLocz);
+			
 			double OverlayValue(Eigen::Vector3d point, eRadiationImagingMode mode);
-
-			static void OverlayRadimgToP3(cv::Mat& p3, const cv::Mat& radImg);
 		};
 	};
 };

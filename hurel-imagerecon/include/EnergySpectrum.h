@@ -20,9 +20,12 @@
 
 #include "EnergySpectrumData.h"
 
+
 #define ENERGY_SPECTRUM_BIN_SIZE (10)
 #define ENERGY_SPECTRUM_MAX (3000)
-#define DOSE_RATE_COEFFICIENT (3.8)
+
+//#define DOSE_RATE_COEFFICIENT (3.8)
+#define DOSE_RATE_COEFFICIENT (1.469) //lge modified
 
 namespace HUREL {
 	namespace Compton {
@@ -51,11 +54,12 @@ namespace HUREL {
 			EnergySpectrum(unsigned int binSize, double maxEnergy);
 
 			inline static bool mIsDoseRateInitComplete = false;
-			
+			static void InitDoseRate();
+
 			inline static std::vector<double> GCoeff = std::vector<double>();
 			inline static std::vector<double> H10Coeff = std::vector<double>();
 			inline static std::vector<double> KermaCoeff = std::vector<double>();
-			static void InitDoseRate();
+			
 			inline static bool mIsPythonInitialized = false;
 			std::vector<BinningEnergy> mHistogramEnergy = std::vector<BinningEnergy>();
 			std::vector<double> mEnergyBin = std::vector<double>();

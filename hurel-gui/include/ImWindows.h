@@ -26,6 +26,7 @@ namespace HUREL {
 
         inline static std::vector<HUREL::IsotopeData> mIsotopeDataList = std::vector<HUREL::IsotopeData>();
         inline static HUREL::IsotopeData mSelectedIsotopeData = HUREL::IsotopeData();
+
         static void ChangeSettingValues(std::string key, std::string value);
     public:
         static void Init();

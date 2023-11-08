@@ -11,6 +11,7 @@
 #include "ReconPointCloud.h"
 #include "EnergySpectrum.h"
 #include "ListModeData.h"
+#include "RtabmapSlamControl.h"
 
 namespace HUREL
 {
@@ -113,11 +114,20 @@ namespace HUREL
 
             size_t GetSizeListedListModeData();
             size_t GetSizeListedEnergyTimeData();
+            cv::Mat GetRGBImage();
+            cv::Mat GetDepthImage();
+            open3d::geometry::PointCloud GetPointCloud();
+            open3d::geometry::PointCloud GetSlamPointCloud();
+            open3d::geometry::PointCloud GetOccupancyPointCloud();
+            Eigen::Matrix4d GetTransMatrix();
 
             cv::Mat mRgbImage;
             cv::Mat mDepthImage;
             open3d::geometry::PointCloud mPointCloud;
             open3d::geometry::PointCloud mSlamPointCloud;
+            open3d::geometry::PointCloud mOccupancyPointCloud;
+            Eigen::Matrix4d mTransMatrix;
+
         };
     } // namespace Compton
 

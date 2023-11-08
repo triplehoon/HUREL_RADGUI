@@ -55,9 +55,9 @@ int main(int argv, char **argc)
 
         spdlog::info(std::string("CWD: ") + cwd);
     }
-
+    //spdlog::set_level(spdlog::level::warn);
     //spdlog::set_level(spdlog::level::debug);
-    // open3d::utility::SetVerbosityLevel(open3d::utility::VerbosityLevel::Debug);
+    open3d::utility::SetVerbosityLevel(open3d::utility::VerbosityLevel::Info);
     
     #pragma endregion
     
@@ -79,7 +79,8 @@ int main(int argv, char **argc)
     #pragma region Lahgi setting
     HUREL::Compton::LahgiControl &lahgi = HUREL::Compton::LahgiControl::instance();
 
-    Eigen::Matrix4d testMatrix = Eigen::Matrix4d::Zero();
+    //Eigen::Matrix4d testMatrix = Eigen::Matrix4d::Zero();
+    
     lahgi.SetType(HUREL::Compton::eMouduleType::QUAD);
 
     HUREL::Compton::SessionData *sessionData = nullptr;
@@ -150,10 +151,14 @@ int main(int argv, char **argc)
     double *testX = new double[600];
     double *testY = new double[600];
 
+    HUREL::MyVisualizer visualizer;
+
+    
+
     std::vector<HUREL::Compton::ListModeData> lmData;
     HUREL::Compton::RadiationImage radData(lmData);
 
-    HUREL::MyVisualizer visualizer;
+   
 
     auto pcdData = open3d::data::DemoICPPointClouds();
 
@@ -163,28 +168,48 @@ int main(int argv, char **argc)
     GLFWwindow *window2 = visualizer.GetWindow();
 
     open3d::geometry::PointCloud pc;
-    open3d::io::ReadPointCloud("../202211130509Cs137_Right_30degree/20220706_DigitalLabScan_500uCi_30s_1.07_0.08_2.09_Pointcloud.ply", pc);
     auto pc_ptr = std::make_shared<open3d::geometry::PointCloud>(pc);
 
+    open3d::geometry::PointCloud pc2;
+    auto pc2_ptr = std::make_shared<open3d::geometry::PointCloud>(pc2);
+
+    open3d::geometry::LineSet pc4;
+    auto pc4_ptr = std::make_shared<open3d::geometry::LineSet>(pc4);
+
+    for (int i = -100; i < 100; ++i)
+    {
+        pc2_ptr->points_.push_back(Eigen::Vector3d(i / 10, 0, 0));
+        pc2_ptr->colors_.push_back(Eigen::Vector3d(255, 0, 0));
+        pc2_ptr->points_.push_back(Eigen::Vector3d(0, i / 10, 0));
+        pc2_ptr->colors_.push_back(Eigen::Vector3d(0, 255, 0));
+        pc2_ptr->points_.push_back(Eigen::Vector3d(0, 0, i / 10));
+        pc2_ptr->colors_.push_back(Eigen::Vector3d(0, 0, 255));
+    }
+
     visualizer.AddGeometry(pc_ptr);
-    pc_ptr->points_.push_back(Eigen::Vector3d(0, 0, 0));
-    pc_ptr->colors_.push_back(Eigen::Vector3d(0, 0, 255));
+    visualizer.AddGeometry(pc2_ptr);
+    visualizer.AddGeometry(pc4_ptr);
+
+    //visualizer.ResetViewPoint(true);
+    //add example point cloud
+    visualizer.PollEvents();
+    visualizer.UpdateGeometry();
+    visualizer.UpdateRender();
+
+    visualizer.GetRenderOption().point_size_ = 1;
+    visualizer.GetViewControl().SetFront(Eigen::Vector3d( 0.031352945222162629, 0.999, 0.030047808024626164));
+    visualizer.GetViewControl().SetUp(Eigen::Vector3d(-0.084379565897175227, -0.027309616355054127, 0.99605937258455834));
+    visualizer.GetViewControl().SetLookat(Eigen::Vector3d(-0.5, -0.5, -0.5));
+    visualizer.GetViewControl().SetZoom(0.52);
 
     bool initial = true;
     bool isSizeSet = false;
 
     std::chrono::steady_clock::time_point lastTime = std::chrono::steady_clock::now();
-    auto viewControl = visualizer.GetViewControl();
-    viewControl.SetFront(Eigen::Vector3d(0, 0, -1));
-    viewControl.SetUp(Eigen::Vector3d(0, 1, 0));
-    viewControl.SetLookat(Eigen::Vector3d(0, 1, 0));
-
-    viewControl.SetZoom(0.3);
-    viewControl.ChangeFieldOfView(0.0);
-
 
     std::future <void> loopUpatePointcloudFuture;
     bool isFutureReady = true;
+    
     // Main loop
     while (!glfwWindowShouldClose(window))
     {
@@ -200,10 +225,12 @@ int main(int argv, char **argc)
 
         if (isFutureReady)
         {
-            loopUpatePointcloudFuture = std::async(std::launch::async, [&pc_ptr, &visualizer]() {
+            loopUpatePointcloudFuture = std::async(std::launch::async, [&pc_ptr, &pc4_ptr, &visualizer]() {
                 //Get slamed point cloud
-                *pc_ptr = HUREL::Compton::RtabmapSlamControl::instance().GetSlamPointCloud();
-              
+                //*pc_ptr = HUREL::Compton::RtabmapSlamControl::instance().GetSlamPointCloud();
+                //*pc_ptr = HUREL::Compton::RtabmapSlamControl::instance().GetCurrentPointCloud();
+                *pc_ptr = HUREL::Compton::RtabmapSlamControl::instance().GetOccupancyPointCloud();
+                *pc4_ptr = HUREL::Compton::RtabmapSlamControl::instance().GetPosePointCloudLineSet();
             });
             isFutureReady = false;
 
@@ -213,16 +240,24 @@ int main(int argv, char **argc)
             if (loopUpatePointcloudFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
             {
                 loopUpatePointcloudFuture.get();
-                // bird eye veiw of the camera
-                
-              
+	            Eigen::Matrix4d t265toLACCAxisTransform;
+	            t265toLACCAxisTransform << 0, 1, 0, 0,
+	            	0, 0, 1, 0,
+	            	1, 0, 0, 0,
+	            	0, 0, 0, 1;
+                Eigen::Matrix4d deviceTransformation = t265toLACCAxisTransform * HUREL::Compton::RtabmapSlamControl::instance().GetOdomentry();
+                Eigen::Vector3d setview;
+                setview(0) = deviceTransformation(0,3);
+                setview(1) = deviceTransformation(1,3);
+                setview(2) = deviceTransformation(2,3);
+
+                visualizer.GetViewControl().SetLookat(setview);
                 visualizer.UpdateGeometry();
-                visualizer.PollEvents();
+                visualizer.PollEvents();                
                 isFutureReady = true;
             }
         }
-        //Get slamed point cloud
-        
+        //Get slamed point cloud        
 
         glfwMakeContextCurrent(window);
 
@@ -246,7 +281,7 @@ int main(int argv, char **argc)
         
         //render in imgui window
         ImGui::SetNextWindowViewport(ImGui::GetMainViewport()->ID);
-        ImGui::Begin("Open3D window(always open)");
+        ImGui::Begin("Occupancy grid");
         ImGui::SetWindowSize(ImVec2(1000, 500), ImGuiCond_Once);
         HUREL::GUI::Reconstruction3D(visualizer);
         // ImGui::SetWindowPos(ImVec2(0, 500), ImGuiCond_Once);
@@ -261,13 +296,12 @@ int main(int argv, char **argc)
             return 1;
         }
 
-        HUREL::GUI::InformationWindow(initial, sessionData);
+        //HUREL::GUI::InformationWindow(initial, sessionData);
 
         HUREL::GUI::ControlWindow(initial, sessionData);
 
         //ImPlot::ShowDemoWindow();
         initial = false;
-
 
 #pragma region rendering
 

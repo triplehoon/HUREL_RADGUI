@@ -15,7 +15,6 @@ inline int findPositionIndex(double value, double min, double max, int spaceCoun
     {
         return -1;
     }
-
     int pValue = static_cast<int>(round((value - min) / pixelSize));
     return pValue == spaceCount ? spaceCount - 1: pValue;
 }
@@ -81,7 +80,7 @@ HUREL::Compton::SessionData::SessionData(std::string fileDir) : mIsLoaded(true),
         loadFile.close();
         return;
     }
-
+    
     while (loadFile.good())
     {
         ListModeData temp;
@@ -97,7 +96,6 @@ HUREL::Compton::SessionData::SessionData(std::string fileDir) : mIsLoaded(true),
         {
             continue;
         }
-
         EnergyTimeData datum;
         datum.InteractionTimeInMili = std::chrono::milliseconds(stoll(words[0]));
         datum.InteractionChannel = stoi(words[1]);
@@ -142,21 +140,7 @@ HUREL::Compton::SessionData::SessionData(std::string fileDir) : mIsLoaded(true),
 HUREL::Compton::SessionData::~SessionData()
 {
 }
-/*
-HUREL::Compton::SessionData::SessionData(const SessionData &other)
-{
-}
 
-SessionData &HUREL::Compton::SessionData::operator=(const SessionData &other)
-{
-    if (this == &other)
-    {
-        return *this;
-    }
-
-    return *this;
-}
-*/
 bool HUREL::Compton::SessionData::Save(std::string fileDir)
 {
     std::string fullFilePath = fileDir + "/LmData.csv";
@@ -177,6 +161,28 @@ bool HUREL::Compton::SessionData::Save(std::string fileDir)
     }
     saveFile.flush();
     saveFile.close();
+
+
+    fullFilePath = fileDir + "/LmTransData.csv";
+    // change / to \//
+    saveFile.open(fullFilePath, std::ios::out);
+    if (!saveFile.is_open())
+    {
+        std::cout << "File is not opened" << std::endl;
+        saveFile.close();
+        return false;
+    }
+    std::vector<ListModeData> data2 = this->GetListedListModeData();
+    for (unsigned int i = 0; i < data2.size(); ++i)
+    {
+        ListModeData &d = data2[i];
+        saveFile << d.WriteListModeTransData() << std::endl;
+    }
+    // flush
+    saveFile.flush();
+    saveFile.close();
+
+
     fullFilePath = fileDir + "/LmEnergyData.csv";
     // change / to \//
     saveFile.open(fullFilePath, std::ios::out);
@@ -210,6 +216,13 @@ bool HUREL::Compton::SessionData::Save(std::string fileDir)
     saveFile.flush();
     saveFile.close();
 
+    //save when the stop botton is pressed
+    //new
+    open3d::geometry::PointCloud pcl = RtabmapSlamControl::instance().GetSlamPointCloud();
+    open3d::io::WritePointCloudOption option;
+    open3d::io::WritePointCloudToPLY(fileDir + "/slam.ply", pcl, option);
+
+    //origin
     cv::imwrite(fileDir + "/rgb.png", mRgbImage);
     cv::imwrite(fileDir + "/depth.png", mDepthImage);
     return true;
@@ -260,6 +273,18 @@ std::vector<ListModeData> HUREL::Compton::SessionData::GetListedListModeData(sEn
     mResetListModeDataMutex.unlock();
     return lmData;
 }
+cv::Mat HUREL::Compton::SessionData::GetRGBImage()
+{ return mRgbImage; }
+cv::Mat HUREL::Compton::SessionData::GetDepthImage()
+{ return mDepthImage; }
+open3d::geometry::PointCloud HUREL::Compton::SessionData::GetPointCloud()
+{ return mPointCloud; }
+open3d::geometry::PointCloud HUREL::Compton::SessionData::GetSlamPointCloud()
+{ return mSlamPointCloud; }
+open3d::geometry::PointCloud HUREL::Compton::SessionData::GetOccupancyPointCloud()
+{ return mOccupancyPointCloud; }
+Eigen::Matrix4d HUREL::Compton::SessionData::GetTransMatrix()
+{ return mTransMatrix; }
 
 std::vector<EnergyTimeData> HUREL::Compton::SessionData::GetListedEnergyTimeData()
 {
@@ -1075,7 +1100,7 @@ void HUREL::Compton::SessionData::UpdateInteractionImage()
 
                 if (positionX != -1 && positionY != -1)
                 {
-                    data.RelativeInteractionPoint(positionX, positionY) += 1;
+                     data.RelativeInteractionPoint(positionY, positionX) += 1;
                 }
             }
         }
@@ -1097,7 +1122,7 @@ void HUREL::Compton::SessionData::UpdateInteractionImage()
 
                     if (positionX != -1 && positionY != -1)
                     {
-                        data.RelativeInteractionPoint(positionX, positionY) += 1;
+                         data.RelativeInteractionPoint(positionY, positionX) += 1;
                     }
                 }
             }
@@ -1121,7 +1146,8 @@ void HUREL::Compton::SessionData::UpdateInteractionImage()
 
                     if (positionX != -1 && positionY != -1)
                     {
-                        data.RelativeInteractionPoint(positionX, positionY) += 1;
+                        //data.RelativeInteractionPoint(positionX, positionY) += 1;
+                        data.RelativeInteractionPoint(positionY, positionX) += 1;
                     }
                 }
             }
@@ -1174,9 +1200,9 @@ void HUREL::Compton::SessionData::Reset()
     mDepthImage = cv::Mat();
     mListModeDataMutex.unlock();
     mResetListModeDataMutex.unlock();
+    mOccupancyPointCloud = open3d::geometry::PointCloud();
     SetNeedToUpatesAsTrue();
 }
-
 
 void HUREL::Compton::SessionData::ResetSpectrum(size_t fpgaChannel)
 {

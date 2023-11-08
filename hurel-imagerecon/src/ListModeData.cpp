@@ -22,6 +22,24 @@ string ListModeData::WriteListModeData()
 
     return data;
 }
+
+string ListModeData::WriteListModeTransData()
+{
+	string data = "";
+	data += std::to_string(this->InteractionTimeInMili.count());	data += ",";
+	data += std::to_string(this->Scatter.TransformedInteractionPoint[0]);	data += ",";
+	data += std::to_string(this->Scatter.TransformedInteractionPoint[1]);	data += ",";
+	data += std::to_string(this->Scatter.TransformedInteractionPoint[2]);	data += ",";
+	data += std::to_string(this->Scatter.InteractionEnergy);	data += ",";
+	data += std::to_string(this->Absorber.TransformedInteractionPoint[0]);	data += ",";
+	data += std::to_string(this->Absorber.TransformedInteractionPoint[1]); data += ",";
+	data += std::to_string(this->Absorber.TransformedInteractionPoint[2]); data += ",";
+	data += std::to_string(this->Absorber.InteractionEnergy); data += ",";
+    data += PrintEigenInOneLine(this->DetectorTransformation); data += ",";
+    data += this->EnergyCheck.sourceName;
+
+    return data;
+}
 bool ListModeData::ReadListModeData(string data)
 {
     std::vector<string> words;

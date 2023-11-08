@@ -61,6 +61,7 @@ namespace HUREL
 
 			void AddListModeDataWithTransformationLoop(std::array<unsigned short, 144> byteData, std::chrono::milliseconds &timeInMili, Eigen::Matrix4d &deviceTransformation);
 			
+			float cx; float cy; float fx; float fy;
 			
 			/*
 			void AddListModeData(const unsigned short(byteData)[144], Eigen::Matrix4d deviceTransformation);			

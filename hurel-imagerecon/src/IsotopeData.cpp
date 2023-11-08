@@ -8,7 +8,7 @@ void HUREL::IsotopeAnalysis::Init()
         // make isotope data list
         // 137-Cs
         IsotopeData Cs137("Cs137", {661.657}, 0, "산업용");
-
+//        IsotopeData Cs137("Cs137", {630}, 0, "산업용");
         // 60-Co
         IsotopeData Co60("Co60", {1173.228, 1332.492}, 1, "산업용");
 
@@ -74,6 +74,8 @@ HUREL::Compton::sEnergyCheck HUREL::IsotopeAnalysis::GetEnergyCheck(std::string 
             if (abs(Energy - isotopeEnergy) < halfOfFwhm)
             {
                 return Compton::sEnergyCheck{sourceName, isotopeEnergy - halfOfFwhm, isotopeEnergy + halfOfFwhm};
+                //return Compton::sEnergyCheck{sourceName, 601,720};
+                
             }
         }
         return Compton::sEnergyCheck();
